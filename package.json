@@ -1,0 +1,28 @@
+{
+  "name": "the-running-coach",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:frontend && wrangler dev",
+    "build:frontend": "vite build",
+    "deploy": "npm run build:frontend && wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck:worker && npm run typecheck:frontend",
+    "typecheck:worker": "tsc -p tsconfig.worker.json --noEmit",
+    "typecheck:frontend": "tsc -p tsconfig.frontend.json --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply running-coach-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply running-coach-db --remote"
+  },
+  "dependencies": {
+    "preact": "^10.24.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260923.1",
+    "@preact/preset-vite": "^2.9.1",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1",
+    "wrangler": "^4.0.0"
+  }
+}
