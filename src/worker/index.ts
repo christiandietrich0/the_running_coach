@@ -1,4 +1,6 @@
 import { handleHealth } from './routes/health';
+import { handleSync } from './routes/sync';
+import { runSync } from './sync';
 
 export interface Env {
   DB: D1Database;
@@ -15,7 +17,11 @@ export default {
       return handleHealth();
     }
 
-    // No other /api/* routes exist yet (Phase 2+); fall through to assets
+    if (url.pathname === '/api/sync' && request.method === 'POST') {
+      return handleSync(request, env);
+    }
+
+    // No other /api/* routes exist yet (Phase 4+); fall through to assets
     // so unmatched /api requests still 404 instead of serving index.html.
     if (url.pathname.startsWith('/api/')) {
       return Response.json({ error: 'not found' }, { status: 404 });
@@ -24,7 +30,7 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  async scheduled(_controller: ScheduledController, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Daily sync cron. Wired up in Phase 2.
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runSync(env, 'incremental').then(() => undefined));
   },
 } satisfies ExportedHandler<Env>;
