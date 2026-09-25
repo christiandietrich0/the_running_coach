@@ -6,8 +6,8 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 6 (Chart screen)** in progress. Plan, Races, Settings
-and the check-in sheet land in later phases.
+Status: **Phase 7 (Plan and Races screens)** in progress. Settings and
+the check-in sheet land in later phases.
 
 ## Architecture
 
@@ -138,6 +138,25 @@ when there isn't one yet.
   descent, which stretches the descent toggle's y-axis so smaller weeks
   flatten out. Worth a decision (log scale, or clip the axis and let
   outliers overflow) once there's more race history to judge it against.
+- **Plan** (`screens/Plan.tsx`): the upcoming-weeks list (type chip, km /
+  long run / D+ / D-, verdict dot), tap a row to edit it inline (sets
+  `user_edited`, with Limited's days/km-cap fields appearing only for
+  that type), and a "Suggest plan" button that runs the auto-fill.
+- **Races** (`screens/Races.tsx`): add/edit/delete, each race showing its
+  targets, taper schedule and feasibility.
+
+Every write on Plan/Races hands the fresh `GET /api/state` response
+(already returned by the write endpoint itself) straight to `App.tsx`'s
+state, so there's never a second round-trip after a save.
+
+**Bug found and fixed while testing Suggest plan**: `buildDenseTimeline`
+let a plan row fully replace an already-actual week's numbers, so
+running Suggest plan mid-week silently overwrote the current week's real
+progress (e.g. 38km actually run) with the suggested target (e.g. 74km)
+everywhere that week was displayed. Fixed in `src/logic/aggregate.ts` --
+a plan row now only annotates the week's type when real data already
+exists for it; the real numbers always win. Covered by a new test in
+`test/logic/aggregate.test.ts`.
 
 ## Tests
 

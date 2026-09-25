@@ -1,8 +1,10 @@
-export type ScreenId = 'week' | 'chart';
+export type ScreenId = 'week' | 'chart' | 'plan' | 'races';
 
 const TABS: { id: ScreenId; label: string }[] = [
   { id: 'week', label: 'This Week' },
   { id: 'chart', label: 'Chart' },
+  { id: 'plan', label: 'Plan' },
+  { id: 'races', label: 'Races' },
 ];
 
 export function TabBar({ active, onChange }: { active: ScreenId; onChange: (id: ScreenId) => void }) {

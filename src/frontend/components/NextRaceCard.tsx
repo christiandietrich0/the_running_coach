@@ -1,20 +1,6 @@
 import { daysUntil } from '../format';
-import type { FeasibilityStatus, RaceState, WeekType } from '../types';
-
-const FEASIBILITY_LABEL: Record<FeasibilityStatus, string> = {
-  FEASIBLE: 'Feasible',
-  TIGHT: 'Tight',
-  NOT_REACHABLE: 'Not safely reachable',
-};
-
-const WEEK_TYPE_LABEL: Record<WeekType, string> = {
-  BUILD: 'Build week',
-  HOLD: 'Hold week',
-  DOWN: 'Down week',
-  TAPER: 'Taper week',
-  RACE: 'Race week',
-  LIMITED: 'Limited week',
-};
+import { FEASIBILITY_LABEL, WEEK_TYPE_LABEL } from '../labels';
+import type { RaceState, WeekType } from '../types';
 
 export function NextRaceCard({ races, today, currentWeekType }: { races: RaceState[]; today: string; currentWeekType: WeekType }) {
   const upcoming = [...races].filter((r) => daysUntil(r.date, today) >= 0).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
@@ -39,7 +25,7 @@ export function NextRaceCard({ races, today, currentWeekType }: { races: RaceSta
         {upcoming.feasibility && (
           <span class={`pill pill-${upcoming.feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[upcoming.feasibility.status]}</span>
         )}
-        <span class="pill">{WEEK_TYPE_LABEL[currentWeekType]}</span>
+        <span class="pill">{WEEK_TYPE_LABEL[currentWeekType]} week</span>
       </div>
     </div>
   );

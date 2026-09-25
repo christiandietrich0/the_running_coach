@@ -135,4 +135,18 @@ describe('buildDenseTimeline', () => {
     expect(raceWeek.isRaceWeek).toBe(true);
     expect(raceWeek.longRunKm).toBeNull();
   });
+
+  it('keeps a week\'s real numbers when a plan row exists for it too (the in-progress current week), only recording the plan\'s type', () => {
+    // 2026-07-06 already has real activity data (kmWeek 50 from `actual`).
+    // A plan row for that same week (e.g. from Suggest plan, run mid-week)
+    // must not blow away what already happened.
+    const planned: PlanWeek[] = [
+      { weekStart: '2026-07-06', type: 'DOWN', km: 74, longRunKm: 53, dplusM: 900, dminusM: 850, limitedDays: null, limitedKmCap: null, userEdited: false },
+    ];
+    const dense = buildDenseTimeline(actual, planned);
+    const week = dense.find((w) => w.weekStart === '2026-07-06')!;
+    expect(week.kmWeek).toBe(50); // the real number, not the plan's 74
+    expect(week.longRunKm).toBe(25); // actual's longest run, not the plan's 53
+    expect(week.weekType).toBe('DOWN'); // but the plan's type is still recorded
+  });
 });

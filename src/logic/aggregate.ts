@@ -137,6 +137,17 @@ export function buildDenseTimeline(
   }
 
   for (const p of planned) {
+    // A week already in progress (the current week, most often) has both
+    // real activity data AND a plan row once a plan exists for it. The
+    // real numbers are what actually happened and must win; only the
+    // plan's type is recorded, so corridor/buildMean still see it as
+    // e.g. a Down week even while it's mid-week.
+    const existing = byWeek.get(p.weekStart);
+    if (existing) {
+      existing.weekType = p.type;
+      continue;
+    }
+
     const isRaceWeek = p.type === 'RACE';
     const longRunKm = isRaceWeek ? null : p.longRunKm ?? null;
     byWeek.set(p.weekStart, {

@@ -130,3 +130,25 @@ export interface StateResponse {
   currentWeekRuns: RunDTO[];
   checkinNeeded: boolean;
 }
+
+// Bodies for the Phase 4 write endpoints (src/worker/validation.ts).
+
+export interface PlanWeekPatch {
+  type: WeekType;
+  km: number | null;
+  longRunKm: number | null;
+  dplusM: number | null;
+  dminusM: number | null;
+  limitedDays: number | null;
+  limitedKmCap: number | null;
+}
+
+export interface RacePatch {
+  name: string;
+  date: string;
+  km: number;
+  dplusM: number;
+  dminusM: number;
+  targetTimeMin: number | null;
+  priority: 'A' | 'B' | 'C';
+}
