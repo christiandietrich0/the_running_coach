@@ -6,8 +6,8 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 1 (Scaffold)** complete. Sync, logic, API and UI land in
-later phases.
+Status: **Phase 2 (Sync)** in progress. Logic, API and UI land in later
+phases.
 
 ## Architecture
 
@@ -49,6 +49,28 @@ Apply schema migrations locally:
 ```bash
 npm run db:migrate:local
 ```
+
+## Sync
+
+Copy `.dev.vars.example` to `.dev.vars` and fill in `ICU_API_KEY` (from
+intervals.icu Settings → Developer Settings) and `ICU_ATHLETE_ID`.
+`.dev.vars` is gitignored and only used for local dev; it is never read
+from anywhere else and never committed.
+
+- `POST /api/sync` runs an incremental sync (last 21 days, upsert by
+  id). This is also what the daily cron trigger calls.
+- `POST /api/sync?mode=backfill` runs a one-time 24-month backfill.
+  Run it once after the schema is applied locally, then rely on
+  incremental sync (manual or cron) from there.
+- Only `Run` and `TrailRun` activities are stored, plus `Walk` and
+  `Hike` if the `includeHikes` setting is on (off by default).
+- Elevation loss (`total_elevation_loss`) is reused from D1 if already
+  known; otherwise it's backfilled via per-activity detail calls, capped
+  per sync call to stay under the Workers Free plan's 50-subrequest
+  limit. A backfill with many missing values converges over a few
+  repeated `mode=backfill` calls rather than one.
+- Both endpoints return a JSON summary: activities fetched/stored per
+  request, a per-month breakdown, and elevation-loss backfill counts.
 
 ## Tests
 
