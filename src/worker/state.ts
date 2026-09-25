@@ -3,7 +3,7 @@
 // return the state after auto-filling the plan.
 import { applySymptomLock, buildDenseTimeline, corridor, feasibility, flags, mergeRuns, mondayOf, raceTargets, references, verdict, weeklyAggregates } from '../logic';
 import { addWeeks, diffDays } from '../logic/dates';
-import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Verdict, WeekType } from '../logic/types';
+import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, Verdict, WeekType } from '../logic/types';
 import { loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
 import type { Env } from './index';
@@ -37,13 +37,28 @@ export interface RaceStateDTO extends Race {
   feasibility: Feasibility | null;
 }
 
+export interface RunDTO {
+  id: string;
+  startLocal: string;
+  distanceM: number;
+  movingS: number;
+  gainM: number;
+  lossM: number;
+  isRace: boolean;
+}
+
 export interface StateResponse {
   today: string;
   currentWeekStart: string;
   settings: Defaults;
   weeks: WeekStateDTO[];
   races: RaceStateDTO[];
+  currentWeekRuns: RunDTO[];
   checkinNeeded: boolean;
+}
+
+function toRunDto(run: Run): RunDTO {
+  return { id: run.id, startLocal: run.startLocal, distanceM: run.distanceM, movingS: run.movingS, gainM: run.gainM, lossM: run.lossM, isRace: run.isRace };
 }
 
 export async function buildState(env: Env): Promise<StateResponse> {
@@ -158,5 +173,10 @@ export async function buildState(env: Env): Promise<StateResponse> {
 
   const checkinNeeded = !checkinsAsc.some((c) => c.weekStart === currentWeekStart);
 
-  return { today, currentWeekStart, settings, weeks, races: raceDtos, checkinNeeded };
+  const currentWeekRuns = runs
+    .filter((r) => mondayOf(r.startLocal) === currentWeekStart)
+    .sort((a, b) => (a.startLocal < b.startLocal ? -1 : 1))
+    .map(toRunDto);
+
+  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded };
 }

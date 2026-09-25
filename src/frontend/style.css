@@ -4,6 +4,17 @@
   --fg: #111318;
   --muted: #6b7280;
   --border: #e5e7eb;
+  --card-bg: #f9fafb;
+  --track-bg: #e5e7eb;
+
+  --green: #16a34a;
+  --green-bg: #ecfdf3;
+  --yellow: #b45309;
+  --yellow-bg: #fffbeb;
+  --red: #dc2626;
+  --red-bg: #fef2f2;
+  --blue: #2563eb;
+  --blue-bg: #eff6ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -12,6 +23,17 @@
     --fg: #f3f4f6;
     --muted: #9ca3af;
     --border: #2a2d34;
+    --card-bg: #191b21;
+    --track-bg: #2a2d34;
+
+    --green: #4ade80;
+    --green-bg: #0f2318;
+    --yellow: #fbbf24;
+    --yellow-bg: #2a2008;
+    --red: #f87171;
+    --red-bg: #2a1212;
+    --blue: #60a5fa;
+    --blue-bg: #0f1c30;
   }
 }
 
@@ -45,8 +67,229 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
+  background: var(--card-bg);
 }
 
 .muted {
   color: var(--muted);
+}
+
+.app-title {
+  font-size: 1.25rem;
+  margin: 0 0 16px;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.card-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* Verdict badge */
+
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+}
+
+.verdict-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.verdict-label {
+  font-weight: 700;
+}
+
+.verdict-reason {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.verdict-green {
+  background: var(--green-bg);
+}
+.verdict-green .verdict-dot {
+  background: var(--green);
+}
+.verdict-green .verdict-label {
+  color: var(--green);
+}
+
+.verdict-yellow {
+  background: var(--yellow-bg);
+}
+.verdict-yellow .verdict-dot {
+  background: var(--yellow);
+}
+.verdict-yellow .verdict-label {
+  color: var(--yellow);
+}
+
+.verdict-red {
+  background: var(--red-bg);
+}
+.verdict-red .verdict-dot {
+  background: var(--red);
+}
+.verdict-red .verdict-label {
+  color: var(--red);
+}
+
+.verdict-blue {
+  background: var(--blue-bg);
+}
+.verdict-blue .verdict-dot {
+  background: var(--blue);
+}
+.verdict-blue .verdict-label {
+  color: var(--blue);
+}
+
+/* Week numbers */
+
+.week-numbers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-weight: 600;
+}
+
+.stat-value-secondary {
+  margin-top: 6px;
+}
+
+.meter-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track-bg);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--green);
+}
+
+.meter-fill-over {
+  background: var(--red);
+}
+
+/* Runs list */
+
+.runs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.runs-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.runs-list li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.run-day {
+  width: 36px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.run-distance {
+  font-weight: 600;
+}
+
+.run-time {
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.run-race-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+/* Check-in prompt */
+
+.prompt {
+  border-left: 3px solid var(--blue);
+}
+
+/* Next race card */
+
+.race-name {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.race-countdown {
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.race-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--muted);
+}
+
+.pill-feasible {
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.pill-tight {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.pill-not_reachable {
+  color: var(--red);
+  border-color: var(--red);
 }

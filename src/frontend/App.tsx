@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'preact/hooks';
+import { fetchState } from './api';
+import { ThisWeek } from './screens/ThisWeek';
+import type { StateResponse } from './types';
 
 export function App() {
-  const [health, setHealth] = useState<string>('checking...');
+  const [state, setState] = useState<StateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((data) => setHealth(data.status))
-      .catch(() => setHealth('unreachable'));
+    fetchState()
+      .then(setState)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   return (
-    <div class="card">
-      <h1>Weekly Load Planner</h1>
-      <p class="muted">Scaffold placeholder. API health: {health}</p>
+    <div>
+      <h1 class="app-title">Weekly Load Planner</h1>
+      {error && (
+        <div class="card">
+          <p class="muted">Could not load your data: {error}</p>
+        </div>
+      )}
+      {!error && !state && (
+        <div class="card">
+          <p class="muted">Loading...</p>
+        </div>
+      )}
+      {state && <ThisWeek state={state} />}
     </div>
   );
 }

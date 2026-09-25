@@ -6,7 +6,8 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 4 (API)** in progress. UI lands in later phases.
+Status: **Phase 5 (This Week screen)** in progress. Chart, Plan, Races,
+Settings and the check-in sheet land in later phases.
 
 ## Architecture
 
