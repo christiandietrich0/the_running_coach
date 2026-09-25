@@ -28,18 +28,18 @@ describe('raceTargets', () => {
     expect(t.peakSingleRunDminusM).toBeCloseTo(2160); // 0.45 * 4800
   });
 
-  it('builds a 3-week A taper for races over 100km, ending in the race week', () => {
+  it('builds the 3-week A taper for races over 100km: week -2, week -1, race week', () => {
     const t = raceTargets(race({ km: 100, dplusM: 5000 }), DEFAULTS); // effort 150km > 100
-    expect(t.taper).toHaveLength(4); // week -3, -2, -1, race week
-    expect(t.taper[t.taper.length - 1].label).toBe('race week');
-    expect(t.taper[t.taper.length - 1].volumeMinPct).toBeCloseTo(DEFAULTS.taperA.raceWeekMinPct);
+    expect(t.taper.map((w) => w.label)).toEqual(['week -2', 'week -1', 'race week']);
+    expect(t.taper[0].volumeMinPct).toBeCloseTo(DEFAULTS.taperA.week2Pct);
     const weekMinus1 = t.taper.find((w) => w.label === 'week -1')!;
     expect(weekMinus1.volumeMinPct).toBeCloseTo(DEFAULTS.taperA.week1MinPct);
+    expect(t.taper[t.taper.length - 1].volumeMinPct).toBeCloseTo(DEFAULTS.taperA.raceWeekMinPct);
   });
 
-  it('builds a 2-week A taper for races at or under 100km', () => {
+  it('builds the 2-week A taper for races at or under 100km: week -1 only, then race week', () => {
     const t = raceTargets(race({ km: 50, dplusM: 0 }), DEFAULTS); // effort 50km <= 100
-    expect(t.taper).toHaveLength(3); // week -2, -1, race week
+    expect(t.taper.map((w) => w.label)).toEqual(['week -1', 'race week']);
   });
 
   it('builds a 1-week B taper', () => {

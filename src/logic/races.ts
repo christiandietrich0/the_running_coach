@@ -7,12 +7,10 @@ export function raceEffortKm(race: Race): number {
   return race.km + race.dplusM / 100;
 }
 
-// Peaks (6.2) and taper schedule (6.3). The mechanics brief gives an exact
-// week-2/week-1/race-week split for a 2-week A taper, but only says "3
-// weeks (for races over 100 km)" for the long form without a distinct
-// third-week number. This treats the extra week as a repeat of the
-// week-2 volume level (70%) rather than inventing a new figure; flag this
-// assumption to Christian, it's a guess, not a spec value.
+// Peaks (6.2) and taper schedule (6.3). The brief's week-2/week-1/race-week
+// numbers (70% / 50-60% / 35-45%) are exactly the 3-week taper for races
+// over 100km -- no invented week needed. The standard 2-week taper is the
+// shorter case: week-2 is dropped, leaving just week-1 and race week.
 export function raceTargets(race: Race, settings: Settings): RaceTargets {
   const effortKm = raceEffortKm(race);
   const peakLongRunKm = Math.min(settings.peakLongRunFactor * effortKm, settings.maxLongRunKm);
@@ -25,15 +23,20 @@ export function raceTargets(race: Race, settings: Settings): RaceTargets {
 
   if (race.priority === 'A') {
     const weeksOut = effortKm > 100 ? settings.taperA.weeksOver100km : settings.taperA.weeksUnder100km;
-    for (let w = weeksOut; w >= 1; w--) {
-      const weekStart = addWeeks(raceWeekStart, -w);
-      if (w === 1) {
-        taper.push({ weekStart, label: 'week -1', volumeMinPct: settings.taperA.week1MinPct, volumeMaxPct: settings.taperA.week1MaxPct });
-      } else {
-        // week -2, and (for 100km+ races) the extra week -3: see note above.
-        taper.push({ weekStart, label: `week -${w}`, volumeMinPct: settings.taperA.week2Pct, volumeMaxPct: settings.taperA.week2Pct });
-      }
+    if (weeksOut > 2) {
+      taper.push({
+        weekStart: addWeeks(raceWeekStart, -2),
+        label: 'week -2',
+        volumeMinPct: settings.taperA.week2Pct,
+        volumeMaxPct: settings.taperA.week2Pct,
+      });
     }
+    taper.push({
+      weekStart: addWeeks(raceWeekStart, -1),
+      label: 'week -1',
+      volumeMinPct: settings.taperA.week1MinPct,
+      volumeMaxPct: settings.taperA.week1MaxPct,
+    });
     taper.push({ weekStart: raceWeekStart, label: 'race week', volumeMinPct: settings.taperA.raceWeekMinPct, volumeMaxPct: settings.taperA.raceWeekMaxPct });
   } else if (race.priority === 'B') {
     const weekStart = addWeeks(raceWeekStart, -settings.taperB.weeks);
