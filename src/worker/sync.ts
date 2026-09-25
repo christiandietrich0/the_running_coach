@@ -36,16 +36,26 @@ function requireConfig(env: Env): IntervalsClientConfig {
   return { athleteId: env.ICU_ATHLETE_ID, apiKey: env.ICU_API_KEY };
 }
 
+// D1's underlying SQLite caps bound parameters per statement well below the
+// hundreds of activity ids a 24-month backfill can produce, so this looks
+// them up in chunks rather than one IN (...) with an id per bind param.
+const ID_LOOKUP_CHUNK_SIZE = 90;
+
 async function existingLossById(env: Env, ids: string[]): Promise<Map<string, number | null>> {
   const result = new Map<string, number | null>();
   if (ids.length === 0) return result;
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = await env.DB.prepare(`SELECT id, loss_m FROM activities WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: string; loss_m: number | null }>();
-  for (const row of rows.results ?? []) {
-    result.set(row.id, row.loss_m);
+
+  for (let i = 0; i < ids.length; i += ID_LOOKUP_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + ID_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await env.DB.prepare(`SELECT id, loss_m FROM activities WHERE id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ id: string; loss_m: number | null }>();
+    for (const row of rows.results ?? []) {
+      result.set(row.id, row.loss_m);
+    }
   }
+
   return result;
 }
 
