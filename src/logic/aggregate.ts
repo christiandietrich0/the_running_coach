@@ -115,7 +115,12 @@ export function weeklyAggregates(runs: Run[], settings: Settings): Map<string, W
 // on the long run of a 3-run week, the planned long run's D- is
 // approximated as the full planned weekly D- (suggestPlan uses the same
 // convention when deriving D+/D- for weeks it fills, mechanics brief 7.3).
-export function buildDenseTimeline(actual: WeeklyAggregate[], planned: PlanWeek[]): TimelinePoint[] {
+export function buildDenseTimeline(
+  actual: WeeklyAggregate[],
+  planned: PlanWeek[],
+  rangeFrom?: string,
+  rangeTo?: string,
+): TimelinePoint[] {
   const byWeek = new Map<string, TimelinePoint>();
 
   for (const a of actual) {
@@ -146,7 +151,14 @@ export function buildDenseTimeline(actual: WeeklyAggregate[], planned: PlanWeek[
     });
   }
 
-  const weeks = [...byWeek.keys()].sort();
+  // rangeFrom/rangeTo extend the span beyond what actual/planned data
+  // covers (e.g. so "this week" always has an entry even with no runs and
+  // no plan row yet). They only ever widen the range: actual/planned data
+  // outside them still wins.
+  const weeks = [...byWeek.keys()];
+  if (rangeFrom) weeks.push(rangeFrom);
+  if (rangeTo) weeks.push(rangeTo);
+  weeks.sort();
   if (weeks.length === 0) return [];
 
   const dense: TimelinePoint[] = [];

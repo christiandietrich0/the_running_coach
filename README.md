@@ -6,8 +6,7 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 3 (Logic module)** in progress. API and UI land in later
-phases.
+Status: **Phase 4 (API)** in progress. UI lands in later phases.
 
 ## Architecture
 
@@ -91,6 +90,30 @@ npm run backtest
 
 It shells out to `wrangler d1 execute --local`, so it needs the local D1
 schema applied and at least one backfill run first (see Sync above).
+
+## API
+
+See `training_planner_technical_brief.md` section 7 for the full spec.
+Every write endpoint validates its body (`src/worker/validation.ts`) and
+returns the fresh `GET /api/state` payload, so the frontend never needs a
+separate refetch after a write.
+
+| Endpoint | Does |
+|---|---|
+| `GET /api/state` | Weeks (history + up to 12 weeks planned/blank ahead) with metrics, refs, corridor, flags and verdict; races with targets and feasibility; current settings |
+| `POST /api/sync?mode=backfill\|incremental` | Manual refresh from intervals.icu |
+| `PUT /api/plan/:week` | Edit a planned week (`:week` a Monday date). Always sets `user_edited` |
+| `POST /api/plan/suggest` | Run auto-fill (never touches edited/Limited weeks), persist the result |
+| `PUT /api/races/new` or `PUT /api/races/:id` | Create (`new`) or replace a race |
+| `DELETE /api/races/:id` | Remove a race |
+| `PUT /api/checkin/:week` | Save a symptom check-in for that week |
+| `PUT /api/activities/:id/override` | Set `isRace`/`exclude` for one activity; 404 on an unknown id |
+| `PUT /api/settings` | Patch one or more `defaults.ts` parameters; rejects unknown keys or a value with the wrong shape |
+
+The current week's type reflects the check-in symptom lock (mechanics
+brief 5.3) automatically; past and future weeks use their plan row's
+type, or `BUILD` (or `RACE`, if any activity that week is race-flagged)
+when there isn't one yet.
 
 ## Tests
 
