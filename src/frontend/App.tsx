@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'preact/hooks';
 import { fetchState } from './api';
+import { TabBar, type ScreenId } from './components/TabBar';
+import { Chart } from './screens/Chart';
 import { ThisWeek } from './screens/ThisWeek';
 import type { StateResponse } from './types';
 
 export function App() {
   const [state, setState] = useState<StateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [screen, setScreen] = useState<ScreenId>('week');
 
   useEffect(() => {
     fetchState()
@@ -26,7 +29,13 @@ export function App() {
           <p class="muted">Loading...</p>
         </div>
       )}
-      {state && <ThisWeek state={state} />}
+      {state && (
+        <>
+          {screen === 'week' && <ThisWeek state={state} />}
+          {screen === 'chart' && <Chart state={state} />}
+          <TabBar active={screen} onChange={setScreen} />
+        </>
+      )}
     </div>
   );
 }

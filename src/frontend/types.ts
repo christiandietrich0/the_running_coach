@@ -110,10 +110,21 @@ export interface RunDTO {
   isRace: boolean;
 }
 
+// Only the fields the Chart screen's colour bands need are typed; the rest
+// of the settings object still round-trips fine through the index signature.
+export interface Settings {
+  ratioZoneEdges: { lowVolume: number; greenMin: number; greenMax: number; red: number };
+  longRunCapFactor: number;
+  singleRunDminusCapFactor: number;
+  weeklyDminusCapFactor: number;
+  weeklyDminusRedFactor: number;
+  [key: string]: unknown;
+}
+
 export interface StateResponse {
   today: string;
   currentWeekStart: string;
-  settings: Record<string, unknown>;
+  settings: Settings;
   weeks: WeekState[];
   races: RaceState[];
   currentWeekRuns: RunDTO[];

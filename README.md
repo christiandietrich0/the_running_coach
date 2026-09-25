@@ -6,8 +6,8 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 5 (This Week screen)** in progress. Chart, Plan, Races,
-Settings and the check-in sheet land in later phases.
+Status: **Phase 6 (Chart screen)** in progress. Plan, Races, Settings
+and the check-in sheet land in later phases.
 
 ## Architecture
 
@@ -115,6 +115,29 @@ The current week's type reflects the check-in symptom lock (mechanics
 brief 5.3) automatically; past and future weeks use their plan row's
 type, or `BUILD` (or `RACE`, if any activity that week is race-flagged)
 when there isn't one yet.
+
+## Frontend screens
+
+- **This Week** (`screens/ThisWeek.tsx`): verdict, the three progress
+  stats, this week's runs, check-in prompt, next race card.
+- **Chart** (`screens/Chart.tsx` + `components/WeekChart.tsx`, Chart.js):
+  12 weeks back (solid bars) through the plan's lookahead (hatched),
+  colour bands, a long-run/descent dot with its cap line, a km / effort-km
+  / descent toggle. Two spec gaps filled by interpretation, flagged for
+  Christian:
+  - Colour bands: km and effort-km both use the km-based chronic
+    reference C (mechanics brief 3.3 says effort-km uses "the same
+    ratio" but doesn't define a separate effort-km chronic reference);
+    descent uses DW4 with the weekly D- cap factors (green/yellow/red,
+    no blue -- there's no low-descent flag).
+  - The long-run dot switches to single-run descent (with the D30 x 1.20
+    cap line) when the descent toggle is active, rather than staying on
+    a km scale that wouldn't fit the metres axis.
+
+  Known rough edge: the real history includes one very large race
+  descent, which stretches the descent toggle's y-axis so smaller weeks
+  flatten out. Worth a decision (log scale, or clip the axis and let
+  outliers overflow) once there's more race history to judge it against.
 
 ## Tests
 

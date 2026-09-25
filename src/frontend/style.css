@@ -15,6 +15,8 @@
   --red-bg: #fef2f2;
   --blue: #2563eb;
   --blue-bg: #eff6ff;
+  --purple: #7c3aed;
+  --bar: #4f46e5;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -34,6 +36,8 @@
     --red-bg: #2a1212;
     --blue: #60a5fa;
     --blue-bg: #0f1c30;
+    --purple: #a78bfa;
+    --bar: #818cf8;
   }
 }
 
@@ -60,7 +64,7 @@ body {
   min-height: 100vh;
   padding: 16px;
   padding-top: max(16px, env(safe-area-inset-top));
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  padding-bottom: calc(64px + max(16px, env(safe-area-inset-bottom)));
 }
 
 .card {
@@ -292,4 +296,83 @@ body {
 .pill-not_reachable {
   color: var(--red);
   border-color: var(--red);
+}
+
+/* Tab bar */
+
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab-button {
+  flex: 1;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  padding: 14px 8px;
+  cursor: pointer;
+}
+
+.tab-button-active {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+/* Chart screen */
+
+.metric-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.toggle-button {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.toggle-button-active {
+  background: var(--bar);
+  border-color: var(--bar);
+  color: #ffffff;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 260px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg);
+  margin-right: 4px;
 }
