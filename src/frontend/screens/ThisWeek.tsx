@@ -5,7 +5,7 @@ import { VerdictBadge } from '../components/VerdictBadge';
 import { WeekNumbers } from '../components/WeekNumbers';
 import type { StateResponse } from '../types';
 
-export function ThisWeek({ state }: { state: StateResponse }) {
+export function ThisWeek({ state, onOpenCheckin }: { state: StateResponse; onOpenCheckin: () => void }) {
   const week = state.weeks.find((w) => w.weekStart === state.currentWeekStart);
   if (!week) {
     return <p class="muted">No data for this week yet.</p>;
@@ -24,7 +24,7 @@ export function ThisWeek({ state }: { state: StateResponse }) {
         <RunsList runs={state.currentWeekRuns} />
       </div>
 
-      <CheckinPrompt needed={state.checkinNeeded} />
+      <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
 
       <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
     </div>

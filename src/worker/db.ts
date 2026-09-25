@@ -46,6 +46,53 @@ export async function loadRawActivities(env: Env): Promise<RawActivity[]> {
   return result;
 }
 
+export interface ActivityWithOverride {
+  id: string;
+  startLocal: string;
+  type: string;
+  distanceM: number;
+  gainM: number;
+  lossM: number;
+  raceFlag: boolean; // from intervals.icu
+  overrideIsRace: boolean | null; // null = no override, defer to raceFlag
+  excluded: boolean;
+  effectiveIsRace: boolean;
+}
+
+// Every synced activity (including excluded ones), for the Settings
+// screen's race-override list (mechanics brief 8.5). loadRawActivities
+// filters excluded activities out for the logic module; this doesn't,
+// since Christian needs to see and un-exclude them too.
+export async function loadActivitiesWithOverrides(env: Env): Promise<ActivityWithOverride[]> {
+  const [activities, overrides] = await Promise.all([
+    env.DB
+      .prepare('SELECT id, start_local, type, distance_m, gain_m, loss_m, race_flag FROM activities ORDER BY start_local DESC')
+      .all<ActivityRow>(),
+    env.DB.prepare('SELECT activity_id, is_race, exclude FROM activity_overrides').all<OverrideRow>(),
+  ]);
+
+  const overrideById = new Map((overrides.results ?? []).map((o) => [o.activity_id, o]));
+
+  return (activities.results ?? []).map((a) => {
+    const override = overrideById.get(a.id);
+    const raceFlag = a.race_flag === 1;
+    const overrideIsRace = override?.is_race != null ? override.is_race === 1 : null;
+    const excluded = override?.exclude === 1;
+    return {
+      id: a.id,
+      startLocal: a.start_local,
+      type: a.type,
+      distanceM: a.distance_m ?? 0,
+      gainM: a.gain_m ?? 0,
+      lossM: a.loss_m ?? 0,
+      raceFlag,
+      overrideIsRace,
+      excluded,
+      effectiveIsRace: overrideIsRace ?? raceFlag,
+    };
+  });
+}
+
 export async function activityExists(env: Env, id: string): Promise<boolean> {
   const row = await env.DB.prepare('SELECT 1 FROM activities WHERE id = ?').bind(id).first();
   return row != null;

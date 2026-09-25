@@ -1,13 +1,11 @@
-// The full check-in sheet (mechanics brief 8, "a sheet on first open each
-// Monday") lands in Phase 8. This is just the prompt: a visible nudge that
-// one is due.
-export function CheckinPrompt({ needed }: { needed: boolean }) {
+// A tappable nudge that a check-in is due; opens the CheckinSheet.
+export function CheckinPrompt({ needed, onClick }: { needed: boolean; onClick: () => void }) {
   if (!needed) return null;
 
   return (
-    <div class="card prompt">
+    <button type="button" class="card prompt checkin-prompt-button" onClick={onClick}>
       <div class="card-title">Check-in due</div>
       <p class="muted">How are your heel, Achilles, knee and hip feeling this week?</p>
-    </div>
+    </button>
   );
 }

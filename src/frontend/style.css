@@ -649,3 +649,130 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Check-in prompt + sheet */
+
+.checkin-prompt-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-end;
+  z-index: 100;
+}
+
+.sheet {
+  background: var(--card-bg);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.sheet-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.checkin-region {
+  display: block;
+  margin-top: 16px;
+}
+
+.checkin-region-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.checkin-score {
+  font-weight: 700;
+}
+
+.checkin-region input[type='range'] {
+  width: 100%;
+}
+
+.checkin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  font-size: 0.9rem;
+}
+
+/* Settings screen */
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-top: 8px;
+}
+
+.settings-grid .field span {
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.activity-list {
+  max-height: 420px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-row:last-child {
+  border-bottom: none;
+}
+
+.activity-row-excluded {
+  opacity: 0.5;
+}
+
+.activity-row-date {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.activity-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chip-toggle {
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.chip-toggle-active {
+  border-color: var(--violet);
+  color: var(--fg);
+  background: var(--blue-bg);
+}

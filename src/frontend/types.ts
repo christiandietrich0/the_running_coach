@@ -152,3 +152,41 @@ export interface RacePatch {
   targetTimeMin: number | null;
   priority: 'A' | 'B' | 'C';
 }
+
+export interface CheckinPatch {
+  heel: number;
+  achilles: number;
+  knee: number;
+  hipOther: number;
+  reducedTraining: boolean;
+}
+
+export interface ActivityOverridePatch {
+  isRace: boolean | null;
+  exclude: boolean;
+}
+
+export interface ActivityDTO {
+  id: string;
+  startLocal: string;
+  type: string;
+  distanceM: number;
+  gainM: number;
+  lossM: number;
+  raceFlag: boolean;
+  overrideIsRace: boolean | null;
+  excluded: boolean;
+  effectiveIsRace: boolean;
+}
+
+export interface SyncResult {
+  mode: 'backfill' | 'incremental';
+  rangeOldest: string;
+  rangeNewest: string;
+  includeHikes: boolean;
+  activitiesFetched: number;
+  activitiesStored: number;
+  perMonth: Record<string, number>;
+  elevationLossBackfilled: number;
+  elevationLossStillMissing: number;
+}

@@ -1,8 +1,13 @@
-import { activityExists, setActivityOverride } from '../db';
+import { activityExists, loadActivitiesWithOverrides, setActivityOverride } from '../db';
 import { readJson } from '../http';
 import type { Env } from '../index';
 import { buildState } from '../state';
 import { parseActivityOverridePatch } from '../validation';
+
+export async function handleListActivities(_request: Request, env: Env): Promise<Response> {
+  const activities = await loadActivitiesWithOverrides(env);
+  return Response.json({ activities });
+}
 
 export async function handlePutActivityOverride(request: Request, env: Env, activityId: string): Promise<Response> {
   const exists = await activityExists(env, activityId);

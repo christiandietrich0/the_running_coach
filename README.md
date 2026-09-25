@@ -6,8 +6,8 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 7 (Plan and Races screens)** in progress. Settings and
-the check-in sheet land in later phases.
+Status: **Phase 8 (Check-in, Settings, PWA)** done. Phase 9 (deploy) is
+next.
 
 ## Architecture
 
@@ -110,6 +110,7 @@ separate refetch after a write.
 | `PUT /api/checkin/:week` | Save a symptom check-in for that week |
 | `PUT /api/activities/:id/override` | Set `isRace`/`exclude` for one activity; 404 on an unknown id |
 | `PUT /api/settings` | Patch one or more `defaults.ts` parameters; rejects unknown keys or a value with the wrong shape |
+| `GET /api/activities` | Every synced activity (including excluded ones) with its effective race status, for the Settings screen's race-override list. Not part of `GET /api/state`, which stays screen-sized |
 
 The current week's type reflects the check-in symptom lock (mechanics
 brief 5.3) automatically; past and future weeks use their plan row's
@@ -157,6 +158,41 @@ everywhere that week was displayed. Fixed in `src/logic/aggregate.ts` --
 a plan row now only annotates the week's type when real data already
 exists for it; the real numbers always win. Covered by a new test in
 `test/logic/aggregate.test.ts`.
+- **Check-in sheet** (`components/CheckinSheet.tsx`): four 0-10 sliders
+  plus the reduced-training toggle. Opens automatically once per week when
+  a check-in is due (`state.checkinNeeded`) and hasn't already been
+  skipped this week (tracked client-side in `localStorage`, since
+  "skipped" isn't a concept the backend needs to know about); also
+  reachable any time by tapping the This Week check-in banner.
+- **Settings** (`screens/Settings.tsx`): a sync-now button, the
+  include-hikes toggle, every `defaults.ts` parameter grouped to match
+  mechanics brief section 9 (`src/frontend/settingsFields.ts` is the
+  single source of field labels/grouping), and the race-override list
+  (mechanics brief 8.5's "race overrides for past activities") backed by
+  the new `GET /api/activities` endpoint. Saving diffs the edited object
+  against what was loaded and only sends the top-level keys that changed.
+
+## PWA
+
+`src/frontend/public/` holds everything Vite copies through unmodified:
+`manifest.json` (standalone display, two icon sizes), placeholder icons
+(a plain mountain glyph -- swap for real branding whenever), and
+`sw.js`, a hand-written service worker (no build plugin, to keep the
+dependency list as it is):
+
+- `GET /api/state` is network-first, caching the latest successful
+  response and falling back to it when offline -- last-known state
+  beats a blank screen.
+- Every other `/api/*` call bypasses the cache entirely (caching a write
+  response would be actively wrong).
+- Everything else (the shell: HTML/JS/CSS) is stale-while-revalidate:
+  instant from cache, refreshed in the background. This avoids needing
+  to know Vite's hashed asset filenames ahead of time, since it caches
+  whatever the browser actually requests rather than a fixed precache
+  list.
+
+Registered from `main.tsx` after first paint; a failed registration
+never blocks the app itself.
 
 ## Tests
 
