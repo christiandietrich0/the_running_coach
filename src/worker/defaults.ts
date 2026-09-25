@@ -17,6 +17,7 @@ export interface Defaults {
   buildCorridor: { min: number; max: number }; // x * C
   holdCorridor: { min: number; max: number }; // x * C
   downCorridorOfBuildMean: { min: number; max: number };
+  downLongRunCapFactor: number; // Down week long-run cap, x * LR30 (mechanics brief section 4)
   downCadenceBuildWeeks: number; // 1 Down per N Build weeks
   hardWeekOnWeekCapPct: number; // +30%
   reentryCapFactor: number; // x * C
@@ -27,6 +28,9 @@ export interface Defaults {
   weeklyDminusRedFactor: number;
   symptomHoldThreshold: number; // region score >=
   symptomDownThreshold: number; // region score >=
+  // Symptom-locked Down weeks get a stricter weekly D- cap than a routine
+  // cadence Down week (mechanics brief section 5.3): x * DW4.
+  symptomDownDminusWeekCapFactor: number;
   peakLongRunFactor: number; // x * race_effort_km
   peakWeekFactor: number; // x * race_effort_km
   peakWeeklyDplusFactor: number; // x * race D+
@@ -49,6 +53,7 @@ export const DEFAULTS: Defaults = {
   buildCorridor: { min: 1.05, max: 1.15 },
   holdCorridor: { min: 0.9, max: 1.05 },
   downCorridorOfBuildMean: { min: 0.6, max: 0.75 },
+  downLongRunCapFactor: 0.7,
   downCadenceBuildWeeks: 3,
   hardWeekOnWeekCapPct: 0.3,
   reentryCapFactor: 1.15,
@@ -59,6 +64,7 @@ export const DEFAULTS: Defaults = {
   weeklyDminusRedFactor: 1.6,
   symptomHoldThreshold: 3,
   symptomDownThreshold: 5,
+  symptomDownDminusWeekCapFactor: 0.5,
   peakLongRunFactor: 0.45,
   peakWeekFactor: 0.9,
   peakWeeklyDplusFactor: 0.6,

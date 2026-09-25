@@ -12,7 +12,8 @@
     "typecheck:worker": "tsc -p tsconfig.worker.json --noEmit",
     "typecheck:frontend": "tsc -p tsconfig.frontend.json --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply running-coach-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply running-coach-db --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply running-coach-db --remote",
+    "backtest": "tsx scripts/backtest.ts"
   },
   "dependencies": {
     "preact": "^10.24.3"
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260923.1",
     "@preact/preset-vite": "^2.9.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.2",
     "vite": "^5.4.8",
     "vitest": "^2.1.1",

@@ -6,7 +6,7 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 2 (Sync)** in progress. Logic, API and UI land in later
+Status: **Phase 3 (Logic module)** in progress. API and UI land in later
 phases.
 
 ## Architecture
@@ -71,6 +71,26 @@ from anywhere else and never committed.
   repeated `mode=backfill` calls rather than one.
 - Both endpoints return a JSON summary: activities fetched/stored per
   request, a per-month breakdown, and elevation-loss backfill counts.
+
+## Logic module
+
+`src/logic/` is the pure TypeScript rules engine (no I/O), split by
+concern: `aggregate.ts` (mergeRuns, weeklyAggregates, the dense weekly
+timeline), `references.ts` (C, LR30, D30, DW4, M12), `flags.ts` (the 5.1
+flags, verdict, symptom check-in locks), `corridor.ts` (per-week-type
+ceilings), `races.ts` (raceTargets, feasibility) and `plan.ts`
+(suggestPlan). Every threshold comes from `src/worker/defaults.ts`
+(`Settings`/`Defaults`), never hardcoded here.
+
+Run the logic over the real history synced into local D1 and print a
+week-by-week table:
+
+```bash
+npm run backtest
+```
+
+It shells out to `wrangler d1 execute --local`, so it needs the local D1
+schema applied and at least one backfill run first (see Sync above).
 
 ## Tests
 
