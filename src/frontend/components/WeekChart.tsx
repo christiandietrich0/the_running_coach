@@ -74,8 +74,9 @@ export function WeekChart({ weeks, metric, settings }: { weeks: WeekState[]; met
 
     const fg = cssVar('--fg');
     const muted = cssVar('--muted');
-    const barColor = cssVar('--bar');
-    const raceColor = cssVar('--purple');
+    const cardBg = cssVar('--card-bg');
+    const barColor = cssVar('--fg');
+    const raceColor = cssVar('--violet');
     const blueBg = cssVar('--blue-bg');
     const greenBg = cssVar('--green-bg');
     const yellowBg = cssVar('--yellow-bg');
@@ -106,9 +107,11 @@ export function WeekChart({ weeks, metric, settings }: { weeks: WeekState[]; met
         label: 'value',
         data: rows.map((r) => r.value),
         backgroundColor: barBackgrounds,
-        borderRadius: 3,
+        borderRadius: 4,
         order: 2,
-        barPercentage: 0.7,
+        categoryPercentage: 0.9,
+        barPercentage: 0.85,
+        maxBarThickness: 24,
       },
       {
         type: 'line',
@@ -116,7 +119,7 @@ export function WeekChart({ weeks, metric, settings }: { weeks: WeekState[]; met
         data: rows.map((r) => r.overlayCap),
         borderColor: muted,
         borderDash: [5, 4],
-        borderWidth: 1.5,
+        borderWidth: 2,
         pointRadius: 0,
         fill: false,
         order: 1,
@@ -126,9 +129,10 @@ export function WeekChart({ weeks, metric, settings }: { weeks: WeekState[]; met
         label: 'overlay',
         data: rows.map((r) => r.overlayValue),
         showLine: false,
-        pointRadius: 3.5,
+        pointRadius: 4.5,
         pointBackgroundColor: fg,
-        pointBorderColor: fg,
+        pointBorderColor: cardBg,
+        pointBorderWidth: 2,
         order: 0,
       },
     ];
@@ -141,8 +145,13 @@ export function WeekChart({ weeks, metric, settings }: { weeks: WeekState[]; met
         maintainAspectRatio: false,
         animation: false,
         scales: {
-          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0 }, grid: { display: false } },
-          y: { ticks: { color: muted }, grid: { color: cssVar('--border') }, beginAtZero: true },
+          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: { size: 11 } }, grid: { display: false } },
+          y: {
+            ticks: { color: muted, maxTicksLimit: 5, font: { size: 11 } },
+            grid: { color: cssVar('--border'), lineWidth: 1 },
+            border: { display: false },
+            beginAtZero: true,
+          },
         },
         plugins: {
           legend: { display: false },

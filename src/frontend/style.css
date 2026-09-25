@@ -7,16 +7,21 @@
   --card-bg: #f9fafb;
   --track-bg: #e5e7eb;
 
-  --green: #16a34a;
-  --green-bg: #ecfdf3;
-  --yellow: #b45309;
-  --yellow-bg: #fffbeb;
-  --red: #dc2626;
-  --red-bg: #fef2f2;
-  --blue: #2563eb;
-  --blue-bg: #eff6ff;
-  --purple: #7c3aed;
-  --bar: #4f46e5;
+  /* Status colors: fixed hues, never themed (validated for contrast on
+     both surfaces; see dataviz skill references/palette.md). Text never
+     wears these directly -- pair with an icon/dot/border, keep body text
+     in --fg. */
+  --green: #0ca30c;
+  --green-bg: rgba(12, 163, 12, 0.14);
+  --yellow: #fab219;
+  --yellow-bg: rgba(250, 178, 25, 0.16);
+  --red: #d03b3b;
+  --red-bg: rgba(208, 59, 59, 0.12);
+
+  /* Categorical: blue = info/low-volume, violet = race identity */
+  --blue: #2a78d6;
+  --blue-bg: rgba(42, 120, 214, 0.12);
+  --violet: #4a3aa7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -28,16 +33,20 @@
     --card-bg: #191b21;
     --track-bg: #2a2d34;
 
-    --green: #4ade80;
-    --green-bg: #0f2318;
-    --yellow: #fbbf24;
-    --yellow-bg: #2a2008;
-    --red: #f87171;
-    --red-bg: #2a1212;
-    --blue: #60a5fa;
-    --blue-bg: #0f1c30;
-    --purple: #a78bfa;
-    --bar: #818cf8;
+    /* Same status hexes (mode-invariant per the validated palette). Washes
+       stay low-alpha here: the same opacity that reads as a clean pastel
+       over a white surface turns muddy over a dark one, since alpha
+       blending pulls every hue down toward the dark base. */
+    --green: #0ca30c;
+    --green-bg: rgba(12, 163, 12, 0.09);
+    --yellow: #fab219;
+    --yellow-bg: rgba(250, 178, 25, 0.09);
+    --red: #d03b3b;
+    --red-bg: rgba(208, 59, 59, 0.08);
+
+    --blue: #3987e5;
+    --blue-bg: rgba(57, 135, 229, 0.08);
+    --violet: #9085e9;
   }
 }
 
@@ -102,19 +111,26 @@ body {
   gap: 10px;
   border-radius: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  background: var(--card-bg);
 }
 
 .verdict-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  margin-top: 4px;
+  margin-top: 5px;
   flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--card-bg);
 }
 
+/* Status colour lives on the dot and the left border, never on the text
+   (the yellow status hue fails text contrast on a light surface by
+   design -- see dataviz skill palette notes). Label and reason stay in
+   ink so they're always legible. */
 .verdict-label {
   font-weight: 700;
+  color: var(--fg);
 }
 
 .verdict-reason {
@@ -124,42 +140,34 @@ body {
 
 .verdict-green {
   background: var(--green-bg);
+  border-left-color: var(--green);
 }
 .verdict-green .verdict-dot {
   background: var(--green);
 }
-.verdict-green .verdict-label {
-  color: var(--green);
-}
 
 .verdict-yellow {
   background: var(--yellow-bg);
+  border-left-color: var(--yellow);
 }
 .verdict-yellow .verdict-dot {
   background: var(--yellow);
 }
-.verdict-yellow .verdict-label {
-  color: var(--yellow);
-}
 
 .verdict-red {
   background: var(--red-bg);
+  border-left-color: var(--red);
 }
 .verdict-red .verdict-dot {
   background: var(--red);
 }
-.verdict-red .verdict-label {
-  color: var(--red);
-}
 
 .verdict-blue {
   background: var(--blue-bg);
+  border-left-color: var(--blue);
 }
 .verdict-blue .verdict-dot {
   background: var(--blue);
-}
-.verdict-blue .verdict-label {
-  color: var(--blue);
 }
 
 /* Week numbers */
@@ -244,10 +252,21 @@ body {
 .run-race-tag {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--red);
-  border: 1px solid var(--red);
+  color: var(--fg);
+  border: 1px solid var(--violet);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 1px 8px 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.run-race-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--violet);
 }
 
 /* Check-in prompt */
@@ -279,23 +298,41 @@ body {
   font-size: 0.8rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 3px 10px;
-  color: var(--muted);
+  padding: 3px 10px 3px 8px;
+  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pill::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
 }
 
 .pill-feasible {
-  color: var(--green);
   border-color: var(--green);
+}
+.pill-feasible::before {
+  background: var(--green);
 }
 
 .pill-tight {
-  color: var(--yellow);
   border-color: var(--yellow);
+}
+.pill-tight::before {
+  background: var(--yellow);
 }
 
 .pill-not_reachable {
-  color: var(--red);
   border-color: var(--red);
+}
+.pill-not_reachable::before {
+  background: var(--red);
 }
 
 /* Tab bar */
@@ -349,30 +386,50 @@ body {
 }
 
 .toggle-button-active {
-  background: var(--bar);
-  border-color: var(--bar);
+  background: var(--blue);
+  border-color: var(--blue);
   color: #ffffff;
 }
 
 .chart-wrap {
   position: relative;
-  height: 260px;
+  height: 280px;
+  margin-top: 4px;
 }
 
 .chart-legend {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
   font-size: 0.78rem;
   color: var(--muted);
 }
 
-.legend-dot {
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.legend-swatch {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--fg);
-  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.legend-swatch-line {
+  width: 14px;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed var(--muted);
+}
+
+.legend-swatch-hatch {
+  background-image: repeating-linear-gradient(45deg, var(--fg), var(--fg) 1.5px, transparent 1.5px, transparent 4px);
 }
