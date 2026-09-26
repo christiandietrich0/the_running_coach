@@ -62,6 +62,7 @@ export interface WeekState {
   raceConflictType: WeekType | null;
   raceId: number | null;
   raceName: string | null;
+  peakForRaceId: number | null;
 }
 
 export interface TaperWeek {
@@ -87,6 +88,7 @@ export interface Feasibility {
   weeksAvailable: number;
   slack: number;
   maxReachableLongRunKm?: number;
+  maxReachableWeekKm: number;
 }
 
 export interface RaceState {

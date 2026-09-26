@@ -157,6 +157,13 @@ export interface FlagsInput {
   checkin: CheckIn | null;
   priorCheckinsAsc: CheckIn[];
   prevWeekKm: number | null;
+  // The immediately preceding week's effective type, so the hard
+  // week-on-week check below can tell whether that week is a meaningful
+  // baseline at all -- a Recovery/Race/Limited week's km is deliberately
+  // atypical (small, huge, or user-capped) and never used as the base,
+  // same as suggestPlan() itself (v1.1 review round 6). Null/undefined for
+  // the very first week in the timeline, or when the caller doesn't know.
+  prevWeekType?: WeekType | null;
   // True for the current, still-in-progress week: kmWeek so far is a
   // partial total, not the week's final volume, so the low-volume floor
   // (which compares kmWeek/C against a ratio floor) would false-positive
@@ -201,19 +208,49 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
 
   // Hard cap: a week-on-week jump of more than 30% is at least yellow,
   // regardless of week type or corridor (5.1). Not evaluated for
-  // Recovery/Limited: a percentage jump between two deliberately small
-  // numbers is noise, not a real overload signal (v1.1 review round 3
-  // item 5).
-  if (weekType !== 'RECOVERY' && weekType !== 'LIMITED' && input.prevWeekKm != null && input.prevWeekKm > 0) {
-    const wow = input.kmWeek / input.prevWeekKm;
-    if (wow > 1 + settings.hardWeekOnWeekCapPct) {
-      out.push({
-        kind: 'RATIO',
-        colour: 'YELLOW',
-        reason: `Week ${input.kmWeek.toFixed(0)} km is ${Math.round((wow - 1) * 100)}% up on last week's ${input.prevWeekKm.toFixed(0)} km (hard cap +30%).`,
-        value: wow,
-        ref: 1 + settings.hardWeekOnWeekCapPct,
-      });
+  // Recovery/Limited weeks themselves: a percentage jump between two
+  // deliberately small numbers is noise, not a real overload signal (v1.1
+  // review round 3 item 5).
+  if (weekType !== 'RECOVERY' && weekType !== 'LIMITED') {
+    if (input.prevWeekType === 'RECOVERY') {
+      // The week right after a Recovery week is a deliberate ramp back up,
+      // not a jump to measure against Recovery's own (deliberately tiny)
+      // km -- it's checked against the flat re-entry cap instead, the same
+      // ceiling corridor() itself generates that week under (v1.1 review
+      // round 6).
+      if (refs.C > 0) {
+        const R = input.kmWeek / refs.C;
+        if (R > settings.reentryCapFactor) {
+          out.push({
+            kind: 'RATIO',
+            colour: 'YELLOW',
+            reason: `Week ${input.kmWeek.toFixed(0)} km is over the re-entry cap of ${(settings.reentryCapFactor * refs.C).toFixed(0)} km (${settings.reentryCapFactor}x chronic average) after last week's Recovery.`,
+            value: R,
+            ref: settings.reentryCapFactor,
+          });
+        }
+      }
+    } else {
+      // Race and Limited weeks are deliberately atypical -- a race spike,
+      // a user-declared cap -- so neither is a meaningful "previous normal
+      // load" to jump from; suggestPlan() never uses them as the base
+      // either (v1.1 review round 6). Only the green floor (0.8x C) still
+      // applies underneath, same as suggestPlan's own capWeekOnWeek.
+      const usablePrevKm = input.prevWeekType === 'RACE' || input.prevWeekType === 'LIMITED' ? null : input.prevWeekKm;
+      const floor = refs.C > 0 ? settings.ratioZoneEdges.greenMin * refs.C : 0;
+      const base = Math.max(usablePrevKm ?? 0, floor);
+      if (base > 0) {
+        const wow = input.kmWeek / base;
+        if (wow > 1 + settings.hardWeekOnWeekCapPct) {
+          out.push({
+            kind: 'RATIO',
+            colour: 'YELLOW',
+            reason: `Week ${input.kmWeek.toFixed(0)} km is ${Math.round((wow - 1) * 100)}% up on your recent baseline of ${base.toFixed(0)} km (hard cap +30%).`,
+            value: wow,
+            ref: 1 + settings.hardWeekOnWeekCapPct,
+          });
+        }
+      }
     }
   }
 

@@ -80,7 +80,12 @@ export function Plan({ state, onStateChange }: { state: StateResponse; onStateCh
                 />
               </div>
             ) : (
-              <PlanWeekRow key={week.weekStart} week={week} onClick={() => setEditingWeek(week.weekStart)} />
+              <PlanWeekRow
+                key={week.weekStart}
+                week={week}
+                peakRace={week.peakForRaceId != null ? (state.races.find((r) => r.id === week.peakForRaceId) ?? null) : null}
+                onClick={() => setEditingWeek(week.weekStart)}
+              />
             ),
           )}
         </div>

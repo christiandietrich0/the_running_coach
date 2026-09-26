@@ -68,6 +68,12 @@ export interface WeekStateDTO {
   // review A-round 2 item 4), so the row can show the race's name.
   raceId: number | null;
   raceName: string | null;
+  // Set only on the race-driven PEAK week (the Build week right before
+  // taper starts) for this race (v1.1 review round 6), so the row can show
+  // a "capped below the race's own target" note when suggestPlan()'s
+  // green-max clamp actually bit -- cross-referenced against that race's
+  // targets.peakWeekEffortKm on the frontend, the same way raceName is.
+  peakForRaceId: number | null;
 }
 
 export interface RaceStateDTO extends Race {
@@ -131,6 +137,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const raceSlots = raceStructureSlots(races, settings);
 
   let prevKm: number | null = null;
+  let prevType: WeekType | null = null;
   const weeks: WeekStateDTO[] = dense.map((w) => {
     const planRow = planByWeek.get(w.weekStart);
     const baseType: WeekType = planRow?.type ?? (w.isRaceWeek ? 'RACE' : 'BUILD');
@@ -169,6 +176,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
         checkin: weekCheckin,
         priorCheckinsAsc,
         prevWeekKm: prevKm,
+        prevWeekType: prevType,
         weekInProgress: w.weekStart === currentWeekStart,
         reentry,
       },
@@ -176,9 +184,12 @@ export async function buildState(env: Env): Promise<StateResponse> {
     );
     let v = verdict(flagList);
     prevKm = w.kmWeek;
+    prevType = effectiveType;
 
     const raceId = planRow?.raceId ?? null;
     const raceName = raceId != null ? (races.find((r) => r.id === raceId)?.name ?? null) : null;
+    const slot = raceSlots.get(w.weekStart);
+    const peakForRaceId = slot?.kind === 'PEAK' ? slot.race.id : null;
 
     // A Race week gets a distinct, neutral verdict, not "on track" (v1.1
     // review round 4 item 1): flags() already returned no flags for it, so
@@ -226,7 +237,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
     // A race's structure only conflicts with a week the plan actually left
     // alone for the user (userEdited or Limited); suggestPlan() itself
     // always applies race structure to everything else.
-    const wantedType = raceSlots.get(w.weekStart) ? raceSlotWeekType(raceSlots.get(w.weekStart)!.kind) : null;
+    const wantedType = slot ? raceSlotWeekType(slot.kind) : null;
     const isUserLocked = !!planRow && (planRow.userEdited || planRow.type === 'LIMITED');
     const raceConflictType = isUserLocked && wantedType != null && wantedType !== planRow!.type ? wantedType : null;
 
@@ -257,6 +268,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
       raceConflictType,
       raceId,
       raceName,
+      peakForRaceId,
     };
   });
 
@@ -276,7 +288,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
     let feas: Feasibility | null = null;
     if (raceMonday >= currentWeekStart) {
       const weeksAvailable = Math.floor(diffDays(raceMonday, currentWeekStart) / 7) + 1;
-      feas = feasibility(race, currentRefs.LR30, weeksAvailable, settings);
+      feas = feasibility(race, currentRefs.LR30, currentRefs.C, weeksAvailable, settings);
     }
     return { ...race, targets, feasibility: feas };
   });

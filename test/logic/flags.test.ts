@@ -194,6 +194,62 @@ describe('weekly ratio flag and hard caps', () => {
     const limited = flags(baseInput({ weekType: 'LIMITED', kmWeek: 8, prevWeekKm: 5, refs }), DEFAULTS);
     expect(limited.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(false);
   });
+
+  // v1.1 review round 6: the hard cap's base must be the *higher* of the
+  // previous week's own km and the green floor (0.8x C) -- the same base
+  // suggestPlan() itself uses (v1.1 review round 5 item 1) -- so a light
+  // week (a Down, a dip) doesn't unfairly suppress the ceiling for the
+  // week right after it.
+  it('floors the hard cap\'s base at 0.8x C, same as suggestPlan, so a light previous week doesn\'t drag the ceiling down', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50 }; // floor = 0.8*50 = 40
+    // Old base (raw prevWeekKm=20): 45/20 = 2.25, way over +30% -- would
+    // have flagged. New base (max(20, 40)=40): 45/40 = 1.125, under the cap.
+    const result = flags(baseInput({ kmWeek: 45, prevWeekKm: 20, refs }), DEFAULTS);
+    expect(result.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(false);
+
+    // Still flags once the jump exceeds the floor-based ceiling: 53/40 = 1.325.
+    const overFloor = flags(baseInput({ kmWeek: 53, prevWeekKm: 20, refs }), DEFAULTS);
+    expect(overFloor.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(true);
+  });
+
+  // v1.1 review round 6: Race and Limited weeks are deliberately atypical
+  // (a race spike, a user-declared cap) and are never used as the hard
+  // cap's base -- only the green floor applies right after one of them,
+  // same exclusion suggestPlan() itself now makes.
+  it('never uses a Race or Limited previous week as the hard cap\'s base', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50 }; // floor = 40
+
+    // Without the exclusion, a huge Race week's km would make the base
+    // 100, masking a real 50% jump (60/40=1.5) as fine (60/100=0.6).
+    const afterRace = flags(baseInput({ kmWeek: 60, prevWeekKm: 100, prevWeekType: 'RACE', refs }), DEFAULTS);
+    expect(afterRace.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(true);
+
+    // Same for a Limited week with an unusually high user-set cap.
+    const afterLimited = flags(baseInput({ kmWeek: 60, prevWeekKm: 90, prevWeekType: 'LIMITED', refs }), DEFAULTS);
+    expect(afterLimited.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(true);
+
+    // A normal previous week's km is still usable as the base.
+    const afterBuild = flags(baseInput({ kmWeek: 60, prevWeekKm: 100, prevWeekType: 'BUILD', refs }), DEFAULTS);
+    expect(afterBuild.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(false);
+  });
+
+  // v1.1 review round 6: the week right after a Recovery week is a
+  // deliberate ramp back up, not a jump to measure against Recovery's own
+  // tiny km -- it's checked against the flat re-entry cap (1.15x C, the
+  // same ceiling corridor() generates it under) instead.
+  it('checks the week after a Recovery week against the re-entry cap instead of the normal growth formula', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50 }; // re-entry cap = 1.15*50 = 57.5
+
+    // Under the old (or Recovery-as-base) formula this would look like a
+    // huge jump (55/10 = 5.5x); under the re-entry cap it's fine.
+    const underCap = flags(baseInput({ kmWeek: 55, prevWeekKm: 10, prevWeekType: 'RECOVERY', refs }), DEFAULTS);
+    expect(underCap.some((f) => f.kind === 'RATIO' && f.reason.includes('re-entry cap'))).toBe(false);
+
+    const overCap = flags(baseInput({ kmWeek: 60, prevWeekKm: 10, prevWeekType: 'RECOVERY', refs }), DEFAULTS);
+    const flag = overCap.find((f) => f.kind === 'RATIO' && f.reason.includes('re-entry cap'));
+    expect(flag).toBeDefined();
+    expect(flag!.colour).toBe('YELLOW');
+  });
 });
 
 describe('low-volume (blue) flag', () => {

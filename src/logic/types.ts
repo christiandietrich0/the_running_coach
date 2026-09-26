@@ -160,4 +160,14 @@ export interface Feasibility {
   weeksAvailable: number;
   slack: number;
   maxReachableLongRunKm?: number;
+  // The highest peak-week km actually reachable by race day, given how
+  // many Build steps fit in the weeks available (v1.1 review round 6):
+  // suggestPlan() clamps every generated week -- including the peak -- to
+  // green-max x C, so the race's own peak week target (raceTargets()'s
+  // peakWeekEffortKm) is only reachable if C itself can grow enough for
+  // that ceiling to cover it. Always set (never above the race's own
+  // target), not just when status is NOT_REACHABLE -- a race can be a
+  // stretch on weekly volume alone while comfortably Tight or even
+  // Feasible on long run.
+  maxReachableWeekKm: number;
 }

@@ -58,31 +58,80 @@ describe('raceTargets', () => {
 
 describe('feasibility', () => {
   // peak_long_run = 0.45 * 60 = 27km (well under the 55km cap), a B race
-  // (2 taper weeks per DEFAULTS.taperB), current LR30 = 25km.
+  // (2 taper weeks per DEFAULTS.taperB), current LR30 = 25km. currentC=50 is
+  // comfortably above this race's own weekly-volume requirement (see the
+  // "weekly volume" describe block below), so it never binds here -- these
+  // cases are purely about the long-run dimension, as before.
   const r = race({ priority: 'B', km: 60, dplusM: 0 });
 
   it('needs 1 Build step (25 -> 27km at +10%/step) plus 2 taper weeks = 3 weeks', () => {
-    const f = feasibility(r, 25, 6, DEFAULTS);
+    const f = feasibility(r, 25, 50, 6, DEFAULTS);
     expect(f.weeksNeeded).toBe(3);
     expect(f.slack).toBe(3);
     expect(f.status).toBe('FEASIBLE');
   });
 
   it('is tight with little slack', () => {
-    const f = feasibility(r, 25, 4, DEFAULTS);
+    const f = feasibility(r, 25, 50, 4, DEFAULTS);
     expect(f.slack).toBe(1);
     expect(f.status).toBe('TIGHT');
   });
 
   it('is not safely reachable with too few weeks, and reports the max reachable long run', () => {
-    const f = feasibility(r, 25, 1, DEFAULTS);
+    const f = feasibility(r, 25, 50, 1, DEFAULTS);
     expect(f.status).toBe('NOT_REACHABLE');
     expect(f.maxReachableLongRunKm).toBeCloseTo(25); // no room for even one Build step
   });
 
   it('treats no LR30 baseline as not reachable', () => {
-    const f = feasibility(r, 0, 10, DEFAULTS);
+    const f = feasibility(r, 0, 50, 10, DEFAULTS);
     expect(f.status).toBe('NOT_REACHABLE');
+  });
+});
+
+// v1.1 review round 6: suggestPlan() now clamps every generated week,
+// including a race's own peak week, to green-max x C -- so a race whose
+// peak week target the runner's current chronic average can't support
+// within the green ceiling is a stretch on *weekly volume*, not just long
+// run, even when the long-run dimension alone would read comfortably
+// Feasible.
+describe('feasibility: weekly volume dimension', () => {
+  // peak_week_effort_km = min(0.9*60, 80) = 54km; needs C such that
+  // 1.2*C >= 54, i.e. C >= 45. A B race, 2 taper weeks. currentLR30=50 is
+  // comfortably above this race's tiny peak long run (27km), so it never
+  // binds here -- these cases are purely about the volume dimension.
+  const r = race({ priority: 'B', km: 60, dplusM: 0 });
+
+  it('is feasible on volume alone when C is already above the required level', () => {
+    const f = feasibility(r, 50, 45, 6, DEFAULTS);
+    expect(f.weeksNeeded).toBe(2); // no Build step needed, just the 2 taper weeks
+    expect(f.status).toBe('FEASIBLE');
+    expect(f.maxReachableWeekKm).toBeCloseTo(54); // fully reachable
+  });
+
+  it('needs Build steps for C to reach the required level (40 -> 45km: 40*1.1=44 falls short, 40*1.1^2=48.4 clears it, so 2 steps)', () => {
+    const f = feasibility(r, 50, 40, 6, DEFAULTS);
+    expect(f.weeksNeeded).toBe(4); // 2 Build steps + 2 taper weeks (0 Down weeks: 2 steps < the 3-step cadence)
+    expect(f.status).toBe('FEASIBLE');
+  });
+
+  it('is Tight or Not-reachable on volume alone even though the long-run dimension is comfortable', () => {
+    const f = feasibility(r, 50, 40, 4, DEFAULTS); // exactly the 4 weeks needed, slack 0
+    expect(f.status).toBe('TIGHT');
+    expect(f.slack).toBe(0);
+  });
+
+  it('reports the peak week capped below the race\'s own target when volume is not reachable', () => {
+    const f = feasibility(r, 50, 10, 2, DEFAULTS); // no room for any Build step (2 taper weeks alone use the budget)
+    expect(f.status).toBe('NOT_REACHABLE');
+    // Reachable peak week = 10 * 1.2 = 12, well under the 54km target.
+    expect(f.maxReachableWeekKm).toBeCloseTo(12);
+    expect(f.maxReachableWeekKm).toBeLessThan(54);
+  });
+
+  it('never reports a reachable peak week above the race\'s own target, however much slack there is', () => {
+    const f = feasibility(r, 50, 200, 20, DEFAULTS); // C already far above what's needed
+    expect(f.maxReachableWeekKm).toBeCloseTo(54); // capped at the target itself, not 1.2*200
   });
 });
 
@@ -108,13 +157,17 @@ describe('feasibility: consumes the A2-corrected LR30, not a stale one (A7)', ()
     expect(refs.LR30).toBeCloseTo(36);
 
     const upcoming = race({ priority: 'B', km: 93, dplusM: 0 }); // peak long run 0.45*93 = 41.85km
-    const correct = feasibility(upcoming, refs.LR30, 8, DEFAULTS);
+    // currentC=100 is comfortably above this race's weekly-volume
+    // requirement (peak_week_effort_km capped at maxWeekKm=80, needing
+    // C>=66.67) in both calls, so it never binds -- this test is purely
+    // about the long-run dimension, as before.
+    const correct = feasibility(upcoming, refs.LR30, 100, 8, DEFAULTS);
 
     // Before A2, evaluating from this week's Monday would have kept the
     // Aug 29 run in-window (Sep 28 - 30 = Aug 29, the boundary itself) and
     // returned 48.1 here -- above the race's peak long run, so feasibility
     // would wrongly conclude zero Build weeks are still needed.
-    const stale = feasibility(upcoming, 48.1, 8, DEFAULTS);
+    const stale = feasibility(upcoming, 48.1, 100, 8, DEFAULTS);
 
     expect(correct.weeksNeeded).toBeGreaterThan(stale.weeksNeeded);
     expect(correct.slack).toBeLessThan(stale.slack);

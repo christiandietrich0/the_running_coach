@@ -139,6 +139,9 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   // (v1.1 review A-round 2 item 5).
   const priorWeekAgg = actualAggregates.find((a) => a.weekStart === addDays(currentWeekStart, -7));
   let prevKm: number | null = priorWeekAgg ? priorWeekAgg.kmWeek : null;
+  // A real actual week (the only way prevType starts out) is never one of
+  // the three excluded types below, so null is the correct seed.
+  let prevType: WeekType | null = null;
 
   // The long-run share cap (v1.1 review round 5 item 2) is resolved once
   // for the whole generated horizon, from how many runs/week the runner
@@ -150,20 +153,40 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       ? settings.longRunShareCap.fewRunsFactor
       : settings.longRunShareCap.manyRunsFactor;
 
-  // Hard week-on-week growth cap, on top of the corridor: the same
-  // threshold the display-side flag (flags.ts) already uses, so a
-  // properly-generated plan can never trip it. Only ever tightens km
+  // Every generated week's km is clamped to at most green-max x C (v1.1
+  // review round 6) -- the same ceiling the display-side ratio flag uses
+  // -- on top of the hard week-on-week growth cap below, so a
+  // properly-generated plan can never trip either flag. This is what
+  // actually bounds a race-driven peak week: its own target (a fraction of
+  // race effort-km) is set by the race's demands, independent of current
+  // fitness, and would otherwise happily exceed the ratio flag's ceiling
+  // when a race asks for more than the runner's chronic average currently
+  // supports. When the clamp bites, the peak week simply comes out lower
+  // than the race's own target -- feasibility() is what surfaces that gap
+  // to the user, not a yellow/red flag on the plan itself.
+  //
+  // On top of that, a hard week-on-week growth cap: the same threshold the
+  // display-side flag (flags.ts) already uses. Only ever tightens km
   // (never raises it), so a deliberate decrease (Taper/Down/Recovery)
   // simply isn't affected. The base is the *higher* of the previous week's
   // own km and the green floor (0.8x C), not the previous week alone
   // (v1.1 review round 5 item 1): otherwise one deliberately light week
   // (a Down, a dip) would drag every week after it down too, compounding
-  // the wrong direction.
+  // the wrong direction. Recovery, Race and Limited weeks are never usable
+  // as that previous-week component (v1.1 review round 6), same as the
+  // flag: Recovery/Limited are deliberately tiny and Race is a deliberate
+  // spike, so none of the three is a meaningful "previous normal load" --
+  // only the green floor applies right after one of them.
   function capWeekOnWeek(km: number, C: number): number {
+    let capped = km;
+    if (C > 0) capped = Math.min(capped, settings.ratioZoneEdges.greenMax * C);
+
     const floor = settings.ratioZoneEdges.greenMin * C;
-    const base = Math.max(prevKm ?? 0, floor);
-    if (base <= 0) return km;
-    return Math.min(km, base * (1 + settings.hardWeekOnWeekCapPct));
+    const usablePrevKm = prevType === 'RECOVERY' || prevType === 'RACE' || prevType === 'LIMITED' ? null : prevKm;
+    const base = Math.max(usablePrevKm ?? 0, floor);
+    if (base > 0) capped = Math.min(capped, base * (1 + settings.hardWeekOnWeekCapPct));
+
+    return capped;
   }
 
   // The real total for a week always anchors the *next* week's cap over
@@ -223,6 +246,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       });
       buildStreak = 0;
       prevKm = anchorKm(cursor, km);
+      prevType = 'RACE';
       continue;
     }
 
@@ -233,6 +257,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       // Respect the user's own explicit number for a locked week over any
       // real (necessarily partial, for the current week) actual total.
       prevKm = existing!.km ?? aggByWeek.get(cursor)?.kmWeek ?? prevKm;
+      prevType = existing!.type;
       continue;
     }
 
@@ -256,6 +281,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       });
       buildStreak += 1;
       prevKm = anchorKm(cursor, km);
+      prevType = 'BUILD';
       continue;
     }
 
@@ -277,6 +303,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         raceId: null,
       });
       prevKm = anchorKm(cursor, km);
+      prevType = 'TAPER';
       continue;
     }
 
@@ -299,6 +326,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       });
       buildStreak = 0;
       prevKm = anchorKm(cursor, kmCap);
+      prevType = 'RECOVERY';
       continue;
     }
 
@@ -338,6 +366,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       raceId: null,
     });
     prevKm = anchorKm(cursor, km);
+    prevType = type;
   }
 
   return filled.sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));

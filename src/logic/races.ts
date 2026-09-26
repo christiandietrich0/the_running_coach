@@ -38,23 +38,51 @@ export function raceTargets(race: Race, settings: Settings): RaceTargets {
   return { raceEffortKm: effortKm, peakLongRunKm, peakWeekEffortKm, peakWeeklyDplusM, peakSingleRunDminusM, taper };
 }
 
-// Steps needed to grow from currentLR30 to the race's peak long run at
-// +10%/Build-week, plus 1 Down week per `downCadenceBuildWeeks` Build
-// weeks, plus the taper. Slack = weeksAvailable - weeksNeeded (6.4).
-export function feasibility(race: Race, currentLR30: number, weeksAvailable: number, settings: Settings): Feasibility {
+// Weeks needed to grow from `current` to `target` at +10%/Build-step (the
+// same rate corridor()'s own Build corridor progresses at), plus 1 Down
+// week per `downCadenceBuildWeeks` Build steps, plus the taper. Shared by
+// both the long-run and the weekly-volume feasibility arms below (v1.1
+// review round 6) -- they're the same growth shape, just projecting a
+// different reference forward.
+function stepsToReach(current: number, target: number, settings: Settings): number {
+  if (current <= 0) return Infinity; // no baseline to project growth from
+  if (target <= current) return 0;
+  return Math.ceil(Math.log(target / current) / Math.log(settings.longRunCapFactor));
+}
+
+function weeksForSteps(steps: number, taperWeeksNeeded: number, settings: Settings): number {
+  if (!Number.isFinite(steps)) return Infinity;
+  return steps + Math.floor(steps / settings.downCadenceBuildWeeks) + taperWeeksNeeded;
+}
+
+// How far `current` could actually grow, at the same +10%/Build-step rate,
+// within `budget` weeks (already net of the taper) -- how many steps fit
+// once 1 Down week per `downCadenceBuildWeeks` Build steps is subtracted.
+function reachableAt(current: number, budget: number, settings: Settings): number {
+  if (current <= 0) return 0;
+  let steps = 0;
+  while (steps + Math.floor(steps / settings.downCadenceBuildWeeks) < budget) steps++;
+  return current * Math.pow(settings.longRunCapFactor, steps);
+}
+
+// Long run needs currentLR30 to reach the race's peak long run (6.4).
+// Weekly volume (v1.1 review round 6) needs the chronic average C to reach
+// a level whose green-max ceiling (1.2x C -- the same ceiling suggestPlan()
+// itself now clamps every generated week to, peak week included) covers
+// the race's own peak week target: a race demanding more than the runner's
+// fitness currently supports comes out as a Tight or Not-reachable race,
+// not as a plan that quietly generates a yellow/red week. The race is only
+// as feasible as its more demanding dimension, so weeksNeeded is the worse
+// of the two arms; slack = weeksAvailable - weeksNeeded (6.4).
+export function feasibility(race: Race, currentLR30: number, currentC: number, weeksAvailable: number, settings: Settings): Feasibility {
   const targets = raceTargets(race, settings);
-  const peakLR = targets.peakLongRunKm;
   const taperWeeksNeeded = targets.taper.length;
 
-  let buildStepsNeeded = 0;
-  if (currentLR30 <= 0) {
-    buildStepsNeeded = Infinity; // no baseline to project growth from
-  } else if (peakLR > currentLR30) {
-    buildStepsNeeded = Math.ceil(Math.log(peakLR / currentLR30) / Math.log(settings.longRunCapFactor));
-  }
+  const longRunWeeksNeeded = weeksForSteps(stepsToReach(currentLR30, targets.peakLongRunKm, settings), taperWeeksNeeded, settings);
+  const targetCForPeakWeek = targets.peakWeekEffortKm / settings.ratioZoneEdges.greenMax;
+  const volumeWeeksNeeded = weeksForSteps(stepsToReach(currentC, targetCForPeakWeek, settings), taperWeeksNeeded, settings);
 
-  const downWeeksNeeded = Number.isFinite(buildStepsNeeded) ? Math.floor(buildStepsNeeded / settings.downCadenceBuildWeeks) : 0;
-  const weeksNeeded = Number.isFinite(buildStepsNeeded) ? buildStepsNeeded + downWeeksNeeded + taperWeeksNeeded : Infinity;
+  const weeksNeeded = Math.max(longRunWeeksNeeded, volumeWeeksNeeded);
   const slack = weeksAvailable - weeksNeeded;
 
   let status: FeasibilityStatus;
@@ -62,13 +90,15 @@ export function feasibility(race: Race, currentLR30: number, weeksAvailable: num
   else if (slack >= 0) status = 'TIGHT';
   else status = 'NOT_REACHABLE';
 
+  const budget = Math.max(0, weeksAvailable - taperWeeksNeeded);
+
   let maxReachableLongRunKm: number | undefined;
   if (status === 'NOT_REACHABLE') {
-    const budget = Math.max(0, weeksAvailable - taperWeeksNeeded);
-    let steps = 0;
-    while (steps + Math.floor(steps / settings.downCadenceBuildWeeks) < budget) steps++;
-    maxReachableLongRunKm = currentLR30 > 0 ? currentLR30 * Math.pow(settings.longRunCapFactor, steps) : 0;
+    maxReachableLongRunKm = reachableAt(currentLR30, budget, settings);
   }
 
-  return { status, weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm };
+  const reachableC = reachableAt(currentC, budget, settings);
+  const maxReachableWeekKm = Math.min(targets.peakWeekEffortKm, reachableC * settings.ratioZoneEdges.greenMax);
+
+  return { status, weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm, maxReachableWeekKm };
 }

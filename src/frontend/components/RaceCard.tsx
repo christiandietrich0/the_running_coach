@@ -13,18 +13,29 @@ function fmtPct(pct: number): string {
 export function RaceCard({
   race,
   today,
+  peakWeekKm,
   onEdit,
   onDelete,
   deleting,
 }: {
   race: RaceState;
   today: string;
+  // The actual generated peak week's km for this race, looked up by the
+  // caller from state.weeks via peakForRaceId (v1.1 review round 6) -- the
+  // real, already-clamped number, not feasibility's own growth-rate
+  // estimate (which projects C forward at a fixed rate and can read more
+  // optimistic than what suggestPlan() actually generates, since C is a
+  // rolling mean, not a value that jumps straight to a new level). Falls
+  // back to feasibility.maxReachableWeekKm only when no such week exists
+  // yet (e.g. the plan hasn't been regenerated since the race was added).
+  peakWeekKm: number | null;
   onEdit: () => void;
   onDelete: () => void;
   deleting: boolean;
 }) {
   const days = daysUntil(race.date, today);
   const { targets, feasibility } = race;
+  const cappedAtKm = peakWeekKm ?? feasibility?.maxReachableWeekKm;
 
   return (
     <div class="card race-card">
@@ -47,6 +58,11 @@ export function RaceCard({
               ? `Max reachable long run by race day: ${fmtKm(feasibility.maxReachableLongRunKm)} km`
               : `${feasibility.weeksNeeded} weeks needed, ${feasibility.weeksAvailable} available`}
           </span>
+          {cappedAtKm != null && cappedAtKm < targets.peakWeekEffortKm - 0.5 && (
+            <span class="muted">
+              Peak week capped at {fmtKm(cappedAtKm)} km (race target {fmtKm(targets.peakWeekEffortKm)} km)
+            </span>
+          )}
         </div>
       )}
 

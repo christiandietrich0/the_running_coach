@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { buildDenseTimeline } from '../../src/logic/aggregate';
 import { addWeeks } from '../../src/logic/dates';
+import { flags, verdict } from '../../src/logic/flags';
 import { raceSlotWeekType, raceStructureSlots, suggestPlan } from '../../src/logic/plan';
+import { isReentryWeek, references } from '../../src/logic/references';
 import { DEFAULTS } from '../../src/worker/defaults';
-import type { PlanWeek, Race, WeeklyAggregate } from '../../src/logic/types';
+import type { PlanWeek, Race, WeekType, WeeklyAggregate } from '../../src/logic/types';
 
 function week(weekStart: string, kmWeek: number): WeeklyAggregate {
   return {
@@ -496,5 +499,129 @@ describe('suggestPlan', () => {
 
     const peakWeek = plan.find((w) => w.weekStart === addWeeks(CURRENT, 1))!;
     expect(peakWeek.km ?? 0).toBeLessThanOrEqual(38 * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
+  });
+});
+
+// v1.1 review round 6: the whole point of matching flags()'s hard
+// week-on-week base (and its Recovery/Race/Limited exclusions) to
+// suggestPlan()'s own is that suggestPlan's output should never trip that
+// flag (or any other) at yellow or red -- it can only ever be green or, at
+// worst, the informational blue low-volume flag. Runs flags() the same way
+// state.ts's buildState() does, over every week suggestPlan generated.
+function assertNeverFlagsYellowOrRed(actualAggregates: WeeklyAggregate[], races: Race[], horizonWeeks: number): void {
+  const plan = suggestPlan({
+    currentWeekStart: CURRENT,
+    existingPlan: [],
+    races,
+    actualAggregates,
+    actualRuns: [],
+    settings: DEFAULTS,
+    horizonWeeks,
+  });
+
+  const dense = buildDenseTimeline(actualAggregates, plan);
+  let prevKm: number | null = null;
+  let prevType: WeekType | null = null;
+
+  for (const w of dense) {
+    if (w.weekType == null) {
+      // A pure actual week with no plan row -- not part of suggestPlan's
+      // output, just rolls forward as this chain's next "previous week".
+      prevKm = w.kmWeek;
+      prevType = null;
+      continue;
+    }
+
+    const refs = references({ weekStart: w.weekStart, denseTimeline: dense, actualRuns: [] }, DEFAULTS);
+    const reentry = isReentryWeek(dense, w.weekStart);
+    const flagList = flags(
+      {
+        weekType: w.weekType,
+        kmWeek: w.kmWeek,
+        longestKm: w.longRunKm ?? 0,
+        longestLossM: w.longRunLossM ?? 0,
+        dminusWeek: w.dminusWeek,
+        refs,
+        checkin: null,
+        priorCheckinsAsc: [],
+        prevWeekKm: prevKm,
+        prevWeekType: prevType,
+        weekInProgress: false,
+        reentry,
+      },
+      DEFAULTS,
+    );
+    const v = verdict(flagList);
+    expect(v.colour, `${w.weekStart} (${w.weekType}): ${v.reason}`).not.toBe('YELLOW');
+    expect(v.colour, `${w.weekStart} (${w.weekType}): ${v.reason}`).not.toBe('RED');
+
+    prevKm = w.kmWeek;
+    prevType = w.weekType;
+  }
+}
+
+describe('invariant: suggestPlan never generates a week flags() colours yellow or red', () => {
+  it('holds over a long steady-state horizon with no races', () => {
+    assertNeverFlagsYellowOrRed(steadyHistory(10, 55), [], 20);
+  });
+
+  it('holds with a chronic dip right before the current week', () => {
+    const history: WeeklyAggregate[] = [
+      ...Array.from({ length: 8 }, (_, i) => week(addWeeks(CURRENT, -(9 - i)), 55)),
+      week(addWeeks(CURRENT, -1), 15), // a big dip, same shape as the round 5 test
+    ];
+    assertNeverFlagsYellowOrRed(history, [], 12);
+  });
+
+  it('holds across a full race cycle: peak, taper, race, recovery, and back to cadence', () => {
+    const race: Race = {
+      id: 1,
+      name: 'Invariant 50k',
+      date: addWeeks(CURRENT, 4),
+      km: 50,
+      dplusM: 2200,
+      dminusM: 2200,
+      targetTimeMin: null,
+      priority: 'A',
+    };
+    assertNeverFlagsYellowOrRed(steadyHistory(10, 55), [race], 16);
+  });
+
+  it('holds across two overlapping races of different priorities, with a chronic dip mixed in', () => {
+    const history: WeeklyAggregate[] = [
+      ...Array.from({ length: 9 }, (_, i) => week(addWeeks(CURRENT, -(10 - i)), 60)),
+      week(addWeeks(CURRENT, -1), 25), // a dip right before "today"
+    ];
+    const races: Race[] = [
+      {
+        id: 1,
+        name: 'Invariant A-race',
+        date: addWeeks(CURRENT, 6),
+        km: 80,
+        dplusM: 4000,
+        dminusM: 4000,
+        targetTimeMin: null,
+        priority: 'A',
+      },
+      {
+        id: 2,
+        name: 'Invariant B-race',
+        date: addWeeks(CURRENT, 18),
+        km: 30,
+        dplusM: 1200,
+        dminusM: 1200,
+        targetTimeMin: null,
+        priority: 'B',
+      },
+    ];
+    assertNeverFlagsYellowOrRed(history, races, 24);
+  });
+
+  it('holds starting from a low-runs-per-week history (few-runs long-run share factor)', () => {
+    const history: WeeklyAggregate[] = Array.from({ length: 8 }, (_, i) => ({
+      ...week(addWeeks(CURRENT, -(8 - i)), 50),
+      runsWeek: 3,
+    }));
+    assertNeverFlagsYellowOrRed(history, [], 16);
   });
 });
