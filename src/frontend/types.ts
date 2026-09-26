@@ -131,6 +131,7 @@ export interface StateResponse {
   races: RaceState[];
   currentWeekRuns: RunDTO[];
   checkinNeeded: boolean;
+  lastPlanUpdateAt: string | null;
 }
 
 // Bodies for the Phase 4 write endpoints (src/worker/validation.ts).

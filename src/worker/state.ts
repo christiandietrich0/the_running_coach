@@ -20,7 +20,7 @@ import {
 } from '../logic';
 import { addDays, addWeeks, diffDays } from '../logic/dates';
 import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, Verdict, WeekType } from '../logic/types';
-import { loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
+import { getLastPlanUpdateAt, loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
 import type { Env } from './index';
 import { getSettings } from './settings-store';
@@ -93,6 +93,10 @@ export interface StateResponse {
   races: RaceStateDTO[];
   currentWeekRuns: RunDTO[];
   checkinNeeded: boolean;
+  // When a sync (manual or cron) last auto-regenerated the plan (v1.1
+  // review round 5 item 3), for the frontend's dismissible "Plan updated"
+  // note. Null until the first sync-triggered regeneration ever runs.
+  lastPlanUpdateAt: string | null;
 }
 
 function toRunDto(run: Run): RunDTO {
@@ -100,12 +104,13 @@ function toRunDto(run: Run): RunDTO {
 }
 
 export async function buildState(env: Env): Promise<StateResponse> {
-  const [rawActivities, planWeeks, races, checkins, settings] = await Promise.all([
+  const [rawActivities, planWeeks, races, checkins, settings, lastPlanUpdateAt] = await Promise.all([
     loadRawActivities(env),
     loadPlanWeeks(env),
     loadRaces(env),
     loadCheckins(env),
     getSettings(env),
+    getLastPlanUpdateAt(env),
   ]);
 
   const runs = mergeRuns(rawActivities, settings.runMergeGapMin);
@@ -283,5 +288,5 @@ export async function buildState(env: Env): Promise<StateResponse> {
     .sort((a, b) => (a.startLocal < b.startLocal ? -1 : 1))
     .map(toRunDto);
 
-  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded };
+  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded, lastPlanUpdateAt };
 }

@@ -5,8 +5,7 @@ import { handlePutPlanWeek, handleResetPlanWeek, handleSuggestPlan } from './rou
 import { handleDeleteRace, handlePutRace } from './routes/races';
 import { handlePutSettings } from './routes/settings';
 import { handleState } from './routes/state';
-import { handleSync } from './routes/sync';
-import { runSync } from './sync';
+import { handleSync, syncAndUpdatePlan } from './routes/sync';
 
 export interface Env {
   DB: D1Database;
@@ -56,6 +55,6 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runSync(env, 'incremental').then(() => undefined));
+    ctx.waitUntil(syncAndUpdatePlan(env, 'incremental').then(() => undefined));
   },
 } satisfies ExportedHandler<Env>;

@@ -288,3 +288,21 @@ export async function upsertCheckin(env: Env, checkin: CheckIn): Promise<void> {
     .bind(checkin.weekStart, checkin.heel, checkin.achilles, checkin.knee, checkin.hipOther, checkin.reducedTraining ? 1 : 0)
     .run();
 }
+
+// When a sync (manual or cron) last triggered an automatic plan
+// regeneration (v1.1 review round 5 item 3), for the frontend's "Plan
+// updated from your latest runs" note. A single fixed row; null until the
+// first sync-triggered regeneration ever runs.
+export async function getLastPlanUpdateAt(env: Env): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT last_plan_update_at FROM sync_meta WHERE id = 1').first<{ last_plan_update_at: string | null }>();
+  return row?.last_plan_update_at ?? null;
+}
+
+export async function setLastPlanUpdateAt(env: Env, iso: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO sync_meta (id, last_plan_update_at) VALUES (1, ?)
+     ON CONFLICT(id) DO UPDATE SET last_plan_update_at = excluded.last_plan_update_at`,
+  )
+    .bind(iso)
+    .run();
+}
