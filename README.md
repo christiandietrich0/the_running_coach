@@ -209,12 +209,24 @@ globals (`Request`, `Response`, `fetch`, ...).
 
 ## Deploy
 
-Not done yet. Deploying touches real Cloudflare resources (D1 database
-creation, secrets, the Worker itself) and needs explicit sign-off first,
-per the project's working agreement. Phase 9 will add the exact commands
-here: `wrangler d1 create`, `wrangler d1 migrations apply --remote`,
-`wrangler secret put ICU_API_KEY`, `wrangler secret put ICU_ATHLETE_ID`,
-`wrangler deploy`.
+Deploying touches real Cloudflare resources and needs explicit sign-off
+per command, per the project's working agreement -- run these yourself
+from a machine with `wrangler` logged in, not from an unattended session.
+
+The remote D1 database is created (`database_id` in `wrangler.toml` is
+the real one). What's left:
+
+```bash
+npm run db:migrate:remote
+npx wrangler secret put ICU_API_KEY
+npx wrangler secret put ICU_ATHLETE_ID
+npm run deploy
+curl -X POST "https://<your-worker-url>/api/sync?mode=backfill"
+```
+
+Then Cloudflare Access (email one-time code, your email only, 30-day
+session) in front of the whole domain, and on iOS: open the Worker's URL
+in Safari, log in once, Share -> Add to Home Screen.
 
 The existing `icu-mcp` Worker on the same Cloudflare account is a
 separate project and is never touched by this one.
