@@ -6,8 +6,10 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **Phase 8 (Check-in, Settings, PWA)** done. Phase 9 (deploy) is
-next.
+Status: **v1 shipped.** Deployed, behind Cloudflare Access, live on
+Christian's iPhone home screen. Per the kickoff brief: live with it for
+a week before touching v2 (section 10: tissue EWMA, frequency flag,
+post-race auto-insertion).
 
 ## Architecture
 
