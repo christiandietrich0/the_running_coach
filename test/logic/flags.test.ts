@@ -180,6 +180,17 @@ describe('weekly ratio flag and hard caps', () => {
     const wow = result.filter((f) => f.kind === 'RATIO');
     expect(wow.some((f) => f.colour === 'YELLOW' && f.reason.includes('hard cap'))).toBe(true);
   });
+
+  // v1.1 review round 3 item 5: a percentage jump between two small,
+  // deliberately-capped numbers is noise, not a real overload signal.
+  it('does not apply the hard week-on-week cap to Recovery or Limited weeks', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50 };
+    const recovery = flags(baseInput({ weekType: 'RECOVERY', kmWeek: 8, prevWeekKm: 5, refs }), DEFAULTS);
+    expect(recovery.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(false);
+
+    const limited = flags(baseInput({ weekType: 'LIMITED', kmWeek: 8, prevWeekKm: 5, refs }), DEFAULTS);
+    expect(limited.some((f) => f.kind === 'RATIO' && f.reason.includes('hard cap'))).toBe(false);
+  });
 });
 
 describe('low-volume (blue) flag', () => {
@@ -219,6 +230,18 @@ describe('low-volume (blue) flag', () => {
     );
     expect(midWeek.some((f) => f.kind === 'LONG_RUN' && f.colour !== 'GREEN')).toBe(true);
     expect(midWeek.some((f) => f.kind === 'RATIO' && f.colour !== 'GREEN')).toBe(true);
+  });
+
+  // v1.1 review round 3 item 4: neither the low-volume floor nor
+  // detraining should fire during the 3-week re-entry window after a
+  // Recovery week -- a temporarily low C is expected there, not a problem.
+  it('never appears during re-entry, even when both the floor and detraining conditions are met', () => {
+    const refs = { ...NEUTRAL_REFS, C: 30, M12: 50 }; // C well under both the floor and 0.7xM12
+    const reentryWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 20, prevWeekKm: 20, refs, reentry: true }), DEFAULTS);
+    expect(reentryWeek.some((f) => f.kind === 'LOW_VOLUME')).toBe(false);
+
+    const sameWeekNotReentry = flags(baseInput({ weekType: 'BUILD', kmWeek: 20, prevWeekKm: 20, refs, reentry: false }), DEFAULTS);
+    expect(sameWeekNotReentry.some((f) => f.kind === 'LOW_VOLUME')).toBe(true);
   });
 });
 

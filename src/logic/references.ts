@@ -14,19 +14,39 @@ function insertionIndex(dense: TimelinePoint[], weekStart: string): number {
   return idx;
 }
 
+// A week that doesn't belong in the C average: a race week or a Recovery
+// week (v1.1 review round 3 item 4 -- Recovery is deliberately low, just
+// like a race week is deliberately a spike, and neither is representative
+// of chronic load).
+function skipsC(w: TimelinePoint | undefined): boolean {
+  return !!w && (w.isRaceWeek || w.weekType === 'RECOVERY');
+}
+
 // C: mean km_week of the `windowWeeks` most recent qualifying weeks before
-// weekStart. Race weeks, and the week immediately after a race week, are
-// skipped and the search continues further back (3.2).
+// weekStart. A race or Recovery week, and the week immediately after one,
+// are skipped and the search continues further back (3.2).
 function computeC(dense: TimelinePoint[], idx: number, windowWeeks: number): { C: number; weeksUsed: number } {
   const qualifying: number[] = [];
   for (let i = idx - 1; i >= 0 && qualifying.length < windowWeeks; i--) {
-    if (dense[i].isRaceWeek) continue;
-    if (dense[i - 1]?.isRaceWeek) continue; // the week right after a race
+    if (skipsC(dense[i])) continue;
+    if (skipsC(dense[i - 1])) continue; // the week right after a race/Recovery week
     qualifying.push(dense[i].kmWeek);
   }
   const weeksUsed = qualifying.length;
   const C = weeksUsed > 0 ? qualifying.reduce((s, v) => s + v, 0) / weeksUsed : 0;
   return { C, weeksUsed };
+}
+
+// True when `weekStart` falls within the 3-week re-entry window right
+// after a Recovery week (v1.1 review round 3 item 4): its own low volume
+// (and that of the two weeks after it) shouldn't trip the low-volume or
+// detraining blue flags during a deliberate, capped ramp back up.
+export function isReentryWeek(dense: TimelinePoint[], weekStart: string): boolean {
+  const idx = insertionIndex(dense, weekStart);
+  for (let back = 1; back <= 3; back++) {
+    if (dense[idx - back]?.weekType === 'RECOVERY') return true;
+  }
+  return false;
 }
 
 // DW4: the largest weekly D- of the previous `windowWeeks` weeks (3.5).

@@ -198,6 +198,49 @@ describe('suggestPlan', () => {
       expect(weekAfter1.longRunKm ?? 0).toBeLessThanOrEqual(DEFAULTS.recoveryLongRunCapKm + 1e-6);
     });
 
+    // v1.1 review round 3 item 3: a race week is always recalculated from
+    // the race, even over a user edit -- there's no such thing as editing
+    // the race's own distance.
+    it('recalculates a race week from the race even if it was user-edited to something else', () => {
+      const race: Race = {
+        id: 11,
+        name: 'Puglia UTMB',
+        date: addWeeks(CURRENT, 4),
+        km: 90,
+        dplusM: 4000,
+        dminusM: 4000,
+        targetTimeMin: null,
+        priority: 'A',
+      };
+      const staleEdit: PlanWeek = {
+        weekStart: race.date,
+        type: 'RACE',
+        km: 52, // some stale hand-edited number, not race.km + shakeouts
+        longRunKm: 0,
+        dplusM: 200,
+        dminusM: 200,
+        limitedDays: null,
+        limitedKmCap: null,
+        userEdited: true,
+        raceId: null,
+      };
+      const plan = suggestPlan({
+        currentWeekStart: CURRENT,
+        existingPlan: [staleEdit],
+        races: [race],
+        actualAggregates: steadyHistory(8),
+        actualRuns: [],
+        settings: DEFAULTS,
+        horizonWeeks: 8,
+      });
+
+      const raceWeek = plan.find((w) => w.weekStart === race.date)!;
+      expect(raceWeek.km).toBeCloseTo(race.km + DEFAULTS.raceWeekShakeouts.count * DEFAULTS.raceWeekShakeouts.kmEach);
+      expect(raceWeek.longRunKm).toBeCloseTo(race.km);
+      expect(raceWeek.raceId).toBe(race.id);
+      expect(raceWeek.userEdited).toBe(false);
+    });
+
     it('raceStructureSlots/raceSlotWeekType expose the same structure for conflict detection', () => {
       const race: Race = { id: 5, name: 'B race', date: addWeeks(CURRENT, 6), km: 50, dplusM: 1000, dminusM: 1000, targetTimeMin: null, priority: 'B' };
       const slots = raceStructureSlots([race], DEFAULTS);
@@ -354,5 +397,41 @@ describe('suggestPlan', () => {
         prevKm = w.km;
       }
     }
+  });
+
+  // v1.1 review round 3 item 1: fix 5 wasn't actually holding in the real
+  // app, because the cap anchored on suggestPlan's own generated number for
+  // the current (still in-progress) week, not the real actual-so-far --
+  // which the display layer already prefers over the plan anyway. A race's
+  // peak week landing right after the current week could then legitimately
+  // jump relative to that generated (and possibly-elevated) number instead
+  // of what has really happened this week.
+  it('anchors the week-on-week cap on the current week\'s real actual-so-far, not its own generated number', () => {
+    const race: Race = {
+      id: 10,
+      name: 'Puglia-like race',
+      date: addWeeks(CURRENT, 3), // 2-week taper -> peak week lands at CURRENT+1
+      km: 90,
+      dplusM: 4000,
+      dminusM: 4000,
+      targetTimeMin: null,
+      priority: 'A',
+    };
+    const actualAggregates: WeeklyAggregate[] = [
+      ...Array.from({ length: 6 }, (_, i) => week(addWeeks(CURRENT, -(7 - i)), 55)),
+      week(CURRENT, 38), // the current week, only partly run so far
+    ];
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [race],
+      actualAggregates,
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 6,
+    });
+
+    const peakWeek = plan.find((w) => w.weekStart === addWeeks(CURRENT, 1))!;
+    expect(peakWeek.km ?? 0).toBeLessThanOrEqual(38 * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
   });
 });

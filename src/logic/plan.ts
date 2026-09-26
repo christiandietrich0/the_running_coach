@@ -1,7 +1,10 @@
 // suggestPlan(): auto-fills unlocked future weeks. See
 // training_planner_mechanics_brief.md section 7.
 //
-// This never touches weeks the user has edited or tagged Limited (7).
+// This never touches weeks the user has edited or tagged Limited (7),
+// except the race week itself, which is always recalculated from the race
+// (v1.1 review round 3 item 3) -- there's no such thing as a user-edited
+// race distance.
 // Races (any priority) drive the plan directly (v1.1 review A3): each one
 // contributes a peak week, its taper weeks, the race week itself, and two
 // recovery weeks after it (Recovery then Down). Everything else is filled
@@ -122,6 +125,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   const horizonEnd = addWeeks(currentWeekStart, horizonWeeks);
 
   const byWeek = new Map<string, PlanWeek>(existingPlan.map((w) => [w.weekStart, w]));
+  const aggByWeek = new Map(actualAggregates.map((a) => [a.weekStart, a]));
   const { dplusPerKm, dminusPerKm } = recentSlopes(actualAggregates, settings.chronicWindowWeeks);
   const slots = raceStructureSlots(races, settings);
   const peakMeanByRaceId = new Map<number, number>();
@@ -143,6 +147,17 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   function capWeekOnWeek(km: number): number {
     if (prevKm == null || prevKm <= 0) return km;
     return Math.min(km, prevKm * (1 + settings.hardWeekOnWeekCapPct));
+  }
+
+  // The real total for a week always anchors the *next* week's cap over
+  // whatever suggestPlan itself generated for that same week (v1.1 review
+  // round 3 item 1). Without this, the current (still in-progress) week's
+  // generated number -- which the display layer already overrides with
+  // real data -- would otherwise keep feeding the chain, silently
+  // re-introducing unlimited compounding one week further out even with
+  // the cap above in place.
+  function anchorKm(cursor: string, generatedKm: number): number {
+    return aggByWeek.get(cursor)?.kmWeek ?? generatedKm;
   }
 
   // Real history + whatever's been filled so far, so C/LR30/DW4 roll
@@ -167,19 +182,15 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   }
 
   for (let cursor = currentWeekStart; cursor < horizonEnd; cursor = addDays(cursor, 7)) {
-    const existing = byWeek.get(cursor);
-    if (isLocked(existing)) {
-      if (existing!.type === 'LIMITED') buildStreak = 0;
-      filled.push(existing!);
-      prevKm = existing!.km ?? prevKm;
-      continue;
-    }
-
     const slot = slots.get(cursor);
 
+    // A race week is always recalculated from the race itself -- km, long
+    // run, D+/D-, and its race name link -- even over a user edit (v1.1
+    // review round 3 item 3): you can't decide to run a different distance
+    // on race day, so nothing should be able to leave this week stuck on a
+    // stale number. This check runs before the lock check below on
+    // purpose, so it wins over any existing/edited row for this week.
     if (slot?.kind === 'RACE') {
-      // Race week's km is the race itself plus shakeouts, not a suggestion
-      // -- exempt from the week-on-week cap (A-round 2 item 4).
       const km = slot.race.km + settings.raceWeekShakeouts.count * settings.raceWeekShakeouts.kmEach;
       filled.push({
         weekStart: cursor,
@@ -194,7 +205,17 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         raceId: slot.race.id,
       });
       buildStreak = 0;
-      prevKm = km;
+      prevKm = anchorKm(cursor, km);
+      continue;
+    }
+
+    const existing = byWeek.get(cursor);
+    if (isLocked(existing)) {
+      if (existing!.type === 'LIMITED') buildStreak = 0;
+      filled.push(existing!);
+      // Respect the user's own explicit number for a locked week over any
+      // real (necessarily partial, for the current week) actual total.
+      prevKm = existing!.km ?? aggByWeek.get(cursor)?.kmWeek ?? prevKm;
       continue;
     }
 
@@ -217,7 +238,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         raceId: null,
       });
       buildStreak += 1;
-      prevKm = km;
+      prevKm = anchorKm(cursor, km);
       continue;
     }
 
@@ -238,7 +259,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         userEdited: false,
         raceId: null,
       });
-      prevKm = km;
+      prevKm = anchorKm(cursor, km);
       continue;
     }
 
@@ -260,7 +281,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         raceId: null,
       });
       buildStreak = 0;
-      prevKm = kmCap;
+      prevKm = anchorKm(cursor, kmCap);
       continue;
     }
 
@@ -299,7 +320,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       userEdited: false,
       raceId: null,
     });
-    prevKm = km;
+    prevKm = anchorKm(cursor, km);
   }
 
   return filled.sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));

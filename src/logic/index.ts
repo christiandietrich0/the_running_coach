@@ -6,3 +6,4 @@ export * from './flags';
 export * from './corridor';
 export * from './races';
 export * from './plan';
+export * from './guidance';

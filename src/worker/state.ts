@@ -7,16 +7,18 @@ import {
   corridor,
   feasibility,
   flags,
+  isReentryWeek,
   mergeRuns,
   mondayOf,
   raceStructureSlots,
   raceSlotWeekType,
   raceTargets,
   references,
+  remainingWeekGuidance,
   verdict,
   weeklyAggregates,
 } from '../logic';
-import { addWeeks, diffDays } from '../logic/dates';
+import { addDays, addWeeks, diffDays } from '../logic/dates';
 import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, Verdict, WeekType } from '../logic/types';
 import { loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
@@ -102,6 +104,11 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const currentWeekStart = mondayOf(today);
   const dense = buildDenseTimeline(actualAggregates, planWeeks, currentWeekStart, addWeeks(currentWeekStart, CHART_LOOKAHEAD_WEEKS));
 
+  // Days left in the current week, counting today (v1.1 review round 3
+  // item 2): the last day of the week itself has exactly 1 remaining, not
+  // 0, so a single day's worth of running is still a real possibility.
+  const remainingDays = Math.max(0, diffDays(addDays(currentWeekStart, 6), today.slice(0, 10)) + 1);
+
   const checkinsAsc = [...checkins].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
   const raceSlots = raceStructureSlots(races, settings);
 
@@ -125,9 +132,11 @@ export async function buildState(env: Env): Promise<StateResponse> {
     }
 
     const refs = references({ weekStart: w.weekStart, denseTimeline: dense, actualRuns: runs }, settings);
+    const reentry = isReentryWeek(dense, w.weekStart);
     const c = corridor(effectiveType, refs, settings, {
       limitedKmCap: planRow?.limitedKmCap ?? null,
       symptomLocked,
+      reentry,
     });
 
     const flagList = flags(
@@ -142,6 +151,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
         priorCheckinsAsc,
         prevWeekKm: prevKm,
         weekInProgress: w.weekStart === currentWeekStart,
+        reentry,
       },
       settings,
     );
@@ -149,15 +159,32 @@ export async function buildState(env: Env): Promise<StateResponse> {
     prevKm = w.kmWeek;
 
     // The generic "On track." reason just repeats the title above it on
-    // This Week; for the current week, replace it with the same remaining
-    // headroom the corridor already computed, so it's one informative line
-    // instead of a duplicate (v1.1 review A-round 2 item 6).
+    // This Week; for the current week, replace it with the remaining
+    // headroom instead, so it's one informative line instead of a
+    // duplicate (v1.1 review A-round 2 item 6, redesigned per round 3 item
+    // 2): the green range (0.8-1.2x C) is the acceptable floor/ceiling, the
+    // Build/Hold corridor is only the "target", and both get capped by
+    // what actually fits in the days left this week.
     if (w.weekStart === currentWeekStart && v.colour === 'GREEN') {
       const parts: string[] = [];
-      if (Number.isFinite(c.kmMax)) {
-        const kmLeftMin = Math.max(0, c.kmMin - w.kmWeek);
-        const kmLeftMax = Math.max(0, c.kmMax - w.kmWeek);
-        parts.push(kmLeftMax > 0 ? `${kmLeftMin.toFixed(0)} to ${kmLeftMax.toFixed(0)} km left` : 'weekly target met');
+      if (refs.C <= 0) {
+        parts.push('rebuilding -- not enough history yet');
+      } else if (Number.isFinite(c.kmMax)) {
+        const guidance = remainingWeekGuidance({
+          doneKm: w.kmWeek,
+          C: refs.C,
+          greenMinFactor: settings.ratioZoneEdges.greenMin,
+          corridorKmMax: c.kmMax,
+          lrMax: c.lrMax,
+          remainingDays,
+        });
+        if (guidance.targetMet) {
+          parts.push('weekly target met');
+        } else if (!guidance.floorReachable) {
+          parts.push("floor not reachable this week, that's fine");
+        } else {
+          parts.push(`${guidance.kmLeftMin.toFixed(0)} to ${guidance.kmLeftMax.toFixed(0)} km left`);
+        }
       }
       if (Number.isFinite(c.lrMax)) {
         parts.push(`long run up to ${c.lrMax.toFixed(0)} km`);

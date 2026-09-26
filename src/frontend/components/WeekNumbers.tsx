@@ -9,7 +9,11 @@ import type { WeekState } from '../types';
 // history yet), the bar and cap text are skipped and only the done value
 // shows.
 function Bar({ fraction }: { fraction: number }) {
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
+  // A 0-km cap (e.g. a Recovery week whose cap worked out to 0) divided
+  // into a 0-km done total is a valid state, not an error -- render it as
+  // empty rather than a NaN-width bar (v1.1 review round 3 item 5).
+  const safeFraction = Number.isFinite(fraction) ? fraction : 0;
+  const pct = Math.max(0, Math.min(1, safeFraction)) * 100;
   return (
     <div class="meter-track">
       <div class={`meter-fill${fraction > 1 ? ' meter-fill-over' : ''}`} style={{ width: `${pct}%` }} />

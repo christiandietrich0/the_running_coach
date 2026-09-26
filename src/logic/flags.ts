@@ -164,6 +164,12 @@ export interface FlagsInput {
   // every other flag here is a genuine "so far" upside signal (long run,
   // descent, ratio ceiling) that stays valid mid-week (v1.1 review A5).
   weekInProgress?: boolean;
+  // True within the 3-week window right after a Recovery week: a
+  // deliberately low chronic average during this re-entry ramp shouldn't
+  // read as a problem (v1.1 review round 3 item 4). The re-entry km cap
+  // itself (settings.reentryCapFactor x C) is applied by corridor(), not
+  // here -- this only gates the blue flags.
+  reentry?: boolean;
 }
 
 // One flag per rule in 5.1, plus the hard week-on-week cap and the
@@ -192,8 +198,11 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
     if (r) out.push(r);
 
     // Hard cap: a week-on-week jump of more than 30% is at least yellow,
-    // regardless of week type or corridor (5.1).
-    if (input.prevWeekKm != null && input.prevWeekKm > 0) {
+    // regardless of week type or corridor (5.1). Not evaluated for
+    // Recovery/Limited: a percentage jump between two deliberately small
+    // numbers is noise, not a real overload signal (v1.1 review round 3
+    // item 5).
+    if (weekType !== 'RECOVERY' && weekType !== 'LIMITED' && input.prevWeekKm != null && input.prevWeekKm > 0) {
       const wow = input.kmWeek / input.prevWeekKm;
       if (wow > 1 + settings.hardWeekOnWeekCapPct) {
         out.push({
@@ -208,8 +217,9 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
   }
 
   // Low volume (blue): R < 0.8 on a Build or Hold week only (5.1). Not
-  // evaluated for the current in-progress week -- see weekInProgress above.
-  if (!input.weekInProgress && (weekType === 'BUILD' || weekType === 'HOLD') && refs.C > 0) {
+  // evaluated for the current in-progress week (weekInProgress) or during
+  // the post-Recovery re-entry window (reentry).
+  if (!input.weekInProgress && !input.reentry && (weekType === 'BUILD' || weekType === 'HOLD') && refs.C > 0) {
     const R = input.kmWeek / refs.C;
     if (R < settings.ratioZoneEdges.lowVolume) {
       out.push({
@@ -222,8 +232,9 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
     }
   }
 
-  // Detraining (blue): C < 0.7 x M12 (5.1).
-  if (refs.M12 > 0 && refs.C < settings.detrainingCFactorOfM12 * refs.M12) {
+  // Detraining (blue): C < 0.7 x M12 (5.1). Also suppressed during re-entry
+  // -- C is expected to be temporarily low right after a Recovery week.
+  if (!input.reentry && refs.M12 > 0 && refs.C < settings.detrainingCFactorOfM12 * refs.M12) {
     out.push({
       kind: 'LOW_VOLUME',
       colour: 'BLUE',

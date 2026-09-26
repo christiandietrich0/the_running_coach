@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDenseTimeline, mergeRuns, weeklyAggregates } from '../../src/logic/aggregate';
 import { addWeeks } from '../../src/logic/dates';
-import { references } from '../../src/logic/references';
+import { isReentryWeek, references } from '../../src/logic/references';
 import { DEFAULTS } from '../../src/worker/defaults';
 import type { PlanWeek, RawActivity, TimelinePoint } from '../../src/logic/types';
 
@@ -40,6 +40,20 @@ describe('references: C (chronic reference)', () => {
     // Qualifying, most-recent-first: 60, 58, 55, then back past the race
     // block to 40 -- the race week (80) and the week after it (20) are
     // both skipped.
+    expect(refs.C).toBeCloseTo((60 + 58 + 55 + 40) / 4);
+    expect(refs.weeksUsedForC).toBe(4);
+  });
+
+  it('skips Recovery weeks and the week right after one, like race weeks (v1.1 review round 3 item 4)', () => {
+    const dense = [
+      week('2026-06-01', 40),
+      week('2026-06-08', 12, { weekType: 'RECOVERY' }),
+      week('2026-06-15', 20), // the week after the Recovery week
+      week('2026-06-22', 55),
+      week('2026-06-29', 58),
+      week('2026-07-06', 60),
+    ];
+    const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: [] }, DEFAULTS);
     expect(refs.C).toBeCloseTo((60 + 58 + 55 + 40) / 4);
     expect(refs.weeksUsedForC).toBe(4);
   });
@@ -160,5 +174,40 @@ describe('references: buildMean', () => {
     ];
     const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: [] }, DEFAULTS);
     expect(refs.buildMean).toBeCloseTo((50 + 55 + 58) / 3);
+  });
+});
+
+// v1.1 review round 3 item 4: the 3 weeks *after* a Recovery week, so a
+// deliberately low chronic average during the ramp back up doesn't trip
+// the low-volume/detraining blue flags. Mirrors the real report: Race,
+// Recovery, Down, Build, Build ("Nov 9" is the 2nd Build week after
+// Recovery -- still inside the window).
+describe('references: isReentryWeek', () => {
+  const dense: TimelinePoint[] = [
+    week('2026-09-14', 60, { weekType: 'BUILD' }),
+    week('2026-09-21', 60, { weekType: 'RACE' }),
+    week('2026-09-28', 12, { weekType: 'RECOVERY' }), // "Oct 26"
+    week('2026-10-05', 40, { weekType: 'DOWN' }), // +1 week: "Nov 2"
+    week('2026-10-12', 45, { weekType: 'BUILD' }), // +2 weeks: "Nov 9"
+    week('2026-10-19', 48, { weekType: 'BUILD' }), // +3 weeks: "Nov 16"
+    week('2026-10-26', 50, { weekType: 'BUILD' }), // +4 weeks: outside the window
+  ];
+
+  it('is false for the Recovery week itself: the window is the weeks after it, not it', () => {
+    expect(isReentryWeek(dense, '2026-09-28')).toBe(false);
+  });
+
+  it('is true for each of the 3 weeks after a Recovery week', () => {
+    expect(isReentryWeek(dense, '2026-10-05')).toBe(true);
+    expect(isReentryWeek(dense, '2026-10-12')).toBe(true); // "Nov 9"
+    expect(isReentryWeek(dense, '2026-10-19')).toBe(true);
+  });
+
+  it('is false once more than 3 weeks have passed since the Recovery week', () => {
+    expect(isReentryWeek(dense, '2026-10-26')).toBe(false);
+  });
+
+  it('is false before any Recovery week has happened', () => {
+    expect(isReentryWeek(dense, '2026-09-21')).toBe(false);
   });
 });
