@@ -31,6 +31,9 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { label: 'Long run cap (x LR30) - also the hard invariant, over this is red', path: ['longRunCapFactor'], step: 0.05 },
       { label: 'LR30 window (days)', path: ['lr30WindowDays'], step: 1 },
       { label: 'Max long run (km)', path: ['maxLongRunKm'], step: 1 },
+      { label: 'Long run share cap: runs/week threshold, at or under this counts as few', path: ['longRunShareCap', 'runsThreshold'], step: 1 },
+      { label: 'Long run share cap: few-runs fraction (x week km)', path: ['longRunShareCap', 'fewRunsFactor'], step: 0.05 },
+      { label: 'Long run share cap: many-runs fraction (x week km)', path: ['longRunShareCap', 'manyRunsFactor'], step: 0.05 },
     ],
   },
   {

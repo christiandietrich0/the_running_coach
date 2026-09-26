@@ -11,11 +11,12 @@
 // forward at the Build/Build/Build/Down cadence. Every generated week's
 // long run is clamped through corridor()'s lrMax, which already folds in
 // the full A1 cap formula (type cap rule, max_long_run_km, the driving
-// race's peak long run, and 0.55x the week's own km); every generated
+// race's peak long run, and a share -- 0.55x or 0.65x, by recent runs/week
+// -- of the week's own km, v1.1 review round 5 item 2); every generated
 // week's km is additionally clamped to at most 1.30x the previous week's
-// own km (v1.1 review A-round 2 item 5), on top of the corridor -- so no
-// generated week can ever come out above what corridor() or the hard
-// week-on-week flag would flag red.
+// own km, or 0.8x C if that's higher (v1.1 review A-round 2 item 5, round
+// 5 item 1), on top of the corridor -- so no generated week can ever come
+// out above what corridor() or the hard week-on-week flag would flag red.
 import { addDays, addWeeks, mondayOf } from './dates';
 import { buildDenseTimeline } from './aggregate';
 import { corridor } from './corridor';
@@ -139,14 +140,30 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   const priorWeekAgg = actualAggregates.find((a) => a.weekStart === addDays(currentWeekStart, -7));
   let prevKm: number | null = priorWeekAgg ? priorWeekAgg.kmWeek : null;
 
+  // The long-run share cap (v1.1 review round 5 item 2) is resolved once
+  // for the whole generated horizon, from how many runs/week the runner
+  // has actually been doing lately -- not recomputed per week, same as
+  // recentSlopes above. Unknown (no history yet) falls back to the
+  // stricter manyRunsFactor, matching the old unconditional 0.55x.
+  const longRunShareFactor =
+    priorWeekAgg != null && priorWeekAgg.runsWeek <= settings.longRunShareCap.runsThreshold
+      ? settings.longRunShareCap.fewRunsFactor
+      : settings.longRunShareCap.manyRunsFactor;
+
   // Hard week-on-week growth cap, on top of the corridor: the same
   // threshold the display-side flag (flags.ts) already uses, so a
   // properly-generated plan can never trip it. Only ever tightens km
   // (never raises it), so a deliberate decrease (Taper/Down/Recovery)
-  // simply isn't affected.
-  function capWeekOnWeek(km: number): number {
-    if (prevKm == null || prevKm <= 0) return km;
-    return Math.min(km, prevKm * (1 + settings.hardWeekOnWeekCapPct));
+  // simply isn't affected. The base is the *higher* of the previous week's
+  // own km and the green floor (0.8x C), not the previous week alone
+  // (v1.1 review round 5 item 1): otherwise one deliberately light week
+  // (a Down, a dip) would drag every week after it down too, compounding
+  // the wrong direction.
+  function capWeekOnWeek(km: number, C: number): number {
+    const floor = settings.ratioZoneEdges.greenMin * C;
+    const base = Math.max(prevKm ?? 0, floor);
+    if (base <= 0) return km;
+    return Math.min(km, base * (1 + settings.hardWeekOnWeekCapPct));
   }
 
   // The real total for a week always anchors the *next* week's cap over
@@ -220,11 +237,11 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
     }
 
     if (slot?.kind === 'PEAK') {
+      const refs = refsAt(cursor);
       const dplusRatioFactor = 1 + dplusPerKm / 100;
       const rawKm = dplusRatioFactor > 0 ? slot.targets.peakWeekEffortKm / dplusRatioFactor : slot.targets.peakWeekEffortKm;
-      const km = capWeekOnWeek(rawKm);
-      const refs = refsAt(cursor);
-      const c = corridor('BUILD', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm });
+      const km = capWeekOnWeek(rawKm, refs.C);
+      const c = corridor('BUILD', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm, longRunShareFactor });
       filled.push({
         weekStart: cursor,
         type: 'BUILD',
@@ -243,10 +260,10 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
     }
 
     if (slot?.kind === 'TAPER') {
-      const peakMean = peakMeanFor(slot.race);
-      const km = capWeekOnWeek((slot.volumePct ?? 0) * peakMean);
       const refs = refsAt(cursor);
-      const c = corridor('TAPER', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm });
+      const peakMean = peakMeanFor(slot.race);
+      const km = capWeekOnWeek((slot.volumePct ?? 0) * peakMean, refs.C);
+      const c = corridor('TAPER', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm, longRunShareFactor });
       filled.push({
         weekStart: cursor,
         type: 'TAPER',
@@ -264,10 +281,10 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
     }
 
     if (slot?.kind === 'POST_RECOVERY') {
-      const peakMean = peakMeanFor(slot.race);
-      const kmCap = capWeekOnWeek(settings.postRaceRecoveryPctOfPeak * peakMean);
       const refs = refsAt(cursor);
-      const c = corridor('RECOVERY', refs, settings, { limitedKmCap: kmCap, kmForLongRunCap: kmCap });
+      const peakMean = peakMeanFor(slot.race);
+      const kmCap = capWeekOnWeek(settings.postRaceRecoveryPctOfPeak * peakMean, refs.C);
+      const c = corridor('RECOVERY', refs, settings, { limitedKmCap: kmCap, kmForLongRunCap: kmCap, longRunShareFactor });
       filled.push({
         weekStart: cursor,
         type: 'RECOVERY',
@@ -302,9 +319,9 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
     const refs = refsAt(cursor);
     const base = corridor(type, refs, settings);
     const rawKm = Number.isFinite(base.kmMax) ? (base.kmMin + base.kmMax) / 2 : refs.C || 0;
-    const km = capWeekOnWeek(rawKm);
+    const km = capWeekOnWeek(rawKm, refs.C);
     const nextTargets = nextRaceTargets(races, cursor, settings);
-    const c = corridor(type, refs, settings, { kmForLongRunCap: km, peakLongRunKm: nextTargets?.peakLongRunKm });
+    const c = corridor(type, refs, settings, { kmForLongRunCap: km, peakLongRunKm: nextTargets?.peakLongRunKm, longRunShareFactor });
     const projectedLongRun = refs.LR30 > 0 ? settings.longRunCapFactor * refs.LR30 : km * 0.4;
     const longRunKm = Math.min(projectedLongRun, c.lrMax);
 

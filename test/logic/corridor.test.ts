@@ -57,16 +57,32 @@ describe('corridor', () => {
     expect(c.lrMax).toBe(DEFAULTS.maxLongRunKm);
   });
 
-  it('long run is capped globally by max_long_run_km, the next race\'s peak LR, and 0.55x the week\'s own km (v1.1 A1)', () => {
+  it('long run is capped globally by max_long_run_km, the next race\'s peak LR, and a share of the week\'s own km (v1.1 A1)', () => {
     const settings = { ...DEFAULTS, maxLongRunKm: 55 };
     // 1.10*LR30=33 would normally win, but a nearby race's peak LR of 20km
-    // and 0.55x a 30km week (16.5km) are both tighter.
+    // and the default 0.55x share of a 30km week (16.5km) are both tighter.
     const capped = corridor('BUILD', REFS, settings, { peakLongRunKm: 20, kmForLongRunCap: 30 });
     expect(capped.lrMax).toBeCloseTo(16.5);
 
     // max_long_run_km itself bites when nothing else is tighter.
     const tinyCap = corridor('BUILD', REFS, { ...settings, maxLongRunKm: 10 });
     expect(tinyCap.lrMax).toBe(10);
+  });
+
+  // v1.1 review round 5 item 2: the long-run share isn't fixed at 0.55x
+  // any more -- a week built around 3 or fewer runs widens to 0.65x, since
+  // the long run then necessarily makes up a bigger share of the week.
+  it('the long-run share cap widens for a low-runs-per-week caller and defaults to the many-runs share otherwise', () => {
+    const fewRuns = corridor('BUILD', REFS, DEFAULTS, { kmForLongRunCap: 40, longRunShareFactor: DEFAULTS.longRunShareCap.fewRunsFactor });
+    expect(fewRuns.lrMax).toBeCloseTo(0.65 * 40);
+
+    const manyRuns = corridor('BUILD', REFS, DEFAULTS, { kmForLongRunCap: 40, longRunShareFactor: DEFAULTS.longRunShareCap.manyRunsFactor });
+    expect(manyRuns.lrMax).toBeCloseTo(0.55 * 40);
+
+    // No factor passed at all (an older caller) falls back to the
+    // stricter many-runs share, matching the old unconditional 0.55x.
+    const noFactor = corridor('BUILD', REFS, DEFAULTS, { kmForLongRunCap: 40 });
+    expect(noFactor.lrMax).toBeCloseTo(0.55 * 40);
   });
 
   it('is open (not zero) when there is no chronic reference yet', () => {

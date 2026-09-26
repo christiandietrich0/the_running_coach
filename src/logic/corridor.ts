@@ -15,9 +15,15 @@ export interface CorridorOptions {
   // progression resumes from here, not from wherever it left off (5.3
   // "It is not the old level").
   reentry?: boolean;
-  // This week's own planned/actual km, for the "at most 0.55 x planned
-  // week km" global long-run cap (v1.1 review A1).
+  // This week's own planned/actual km, for the "at most X x planned week
+  // km" global long-run cap (v1.1 review A1). The share X itself comes
+  // from longRunShareFactor below, not a fixed number any more.
   kmForLongRunCap?: number | null;
+  // The resolved long-run share (v1.1 review round 5 item 2): settings
+  // .longRunShareCap.fewRunsFactor or .manyRunsFactor, chosen by the
+  // caller from how many runs/week the week is built around. Falls back
+  // to manyRunsFactor when the caller doesn't know (or doesn't care).
+  longRunShareFactor?: number | null;
   // The driving race's peak long run target, for the "at most the peak LR
   // of the next race" global cap and for Taper's own 0.50x-peak-LR rule
   // (A1).
@@ -28,13 +34,19 @@ const OPEN_KM: Pick<Corridor, 'kmMin' | 'kmMax' | 'lrMax'> = { kmMin: 0, kmMax: 
 
 // The long run's global ceiling (A1): never more than max_long_run_km,
 // never more than the driving race's peak long run, and never more than
-// 0.55x this week's own km -- on top of whatever type-specific "cap rule"
-// the caller already worked out. Race weeks are exempt: their long run is
-// the race itself, set directly elsewhere, never through this function.
+// a share of this week's own km -- on top of whatever type-specific "cap
+// rule" the caller already worked out. That share is 0.55x by default but
+// widens to 0.65x for a week built around 3 or fewer runs, since the long
+// run then necessarily makes up more of the week (v1.1 review round 5
+// item 2). Race weeks are exempt: their long run is the race itself, set
+// directly elsewhere, never through this function.
 function capLongRun(typeCapRule: number, settings: Settings, options: CorridorOptions): number {
   let cap = Math.min(typeCapRule, settings.maxLongRunKm);
   if (options.peakLongRunKm != null) cap = Math.min(cap, options.peakLongRunKm);
-  if (options.kmForLongRunCap != null) cap = Math.min(cap, 0.55 * options.kmForLongRunCap);
+  if (options.kmForLongRunCap != null) {
+    const shareFactor = options.longRunShareFactor ?? settings.longRunShareCap.manyRunsFactor;
+    cap = Math.min(cap, shareFactor * options.kmForLongRunCap);
+  }
   return cap;
 }
 

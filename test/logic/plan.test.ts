@@ -368,7 +368,7 @@ describe('suggestPlan', () => {
   // would allow. Real report: a big dip right before the current week
   // otherwise let the corridor's C-based midpoint for the very next
   // (Build) week jump straight back up regardless of that one low week.
-  it('never lets a generated week\'s km exceed 1.30x the previous week\'s km, on top of the corridor', () => {
+  it('never lets a generated week\'s km exceed 1.30x max(previous week, green-min x C), on top of the corridor', () => {
     const history: WeeklyAggregate[] = [
       ...Array.from({ length: 6 }, (_, i) => week(addWeeks(CURRENT, -(7 - i)), 60)),
       week(addWeeks(CURRENT, -1), 20), // a big dip right before currentWeekStart
@@ -383,20 +383,83 @@ describe('suggestPlan', () => {
       horizonWeeks: 6,
     });
 
-    // Without the cap, the corridor's C-based midpoint here would be
-    // ~55 km (C averages the dip in with three 60 km weeks) -- more than
-    // 2.5x the 20 km week right before it.
+    // C over the last 4 weeks is (60+60+60+20)/4 = 50, so the green floor
+    // (0.8x C = 40) is higher than the 20 km dip itself. The cap's base is
+    // the *higher* of the two (v1.1 review round 5 item 1), so the first
+    // generated week can reach 40 x 1.30 = 52 -- well above 20 x 1.30 = 26,
+    // and well below the corridor's own uncapped ~55-60 km midpoint.
     const first = plan.find((w) => w.weekStart === CURRENT)!;
-    expect(first.km ?? 0).toBeLessThanOrEqual(20 * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
+    expect(first.km).toBeCloseTo(52, 5);
+    expect(first.km ?? 0).toBeGreaterThan(20 * (1 + DEFAULTS.hardWeekOnWeekCapPct));
+  });
 
-    // The cap keeps applying week to week, not just on the first one.
-    let prevKm = 20;
-    for (const w of plan) {
-      if (w.km != null) {
-        expect(w.km).toBeLessThanOrEqual(prevKm * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
-        prevKm = w.km;
-      }
+  // v1.1 review round 5 item 1: a single deliberately light week (a Down,
+  // a dip) must not drag every week after it down too by feeding back into
+  // its own cap's base -- the floor (green-min x C) rescues it as soon as C
+  // itself hasn't dropped as much as that one week did.
+  it('does not let one light week drag every following week down with it', () => {
+    const history: WeeklyAggregate[] = [
+      ...Array.from({ length: 6 }, (_, i) => week(addWeeks(CURRENT, -(7 - i)), 60)),
+      week(addWeeks(CURRENT, -1), 20),
+    ];
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [],
+      actualAggregates: history,
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 4,
+    });
+
+    // If the cap's base were still just the raw previous week, each week
+    // could only ever grow 1.30x over the last one: 20 -> 26 -> 33.8 ->
+    // 43.94. It should instead recover close to C's own level within a
+    // couple of weeks, not stay pinned to that chain.
+    const byWeek = new Map(plan.map((w) => [w.weekStart, w.km ?? 0]));
+    expect(byWeek.get(CURRENT)).toBeGreaterThan(26);
+    expect(byWeek.get(addWeeks(CURRENT, 2))).toBeGreaterThan(33.8);
+  });
+
+  // v1.1 review round 5 item 2: the long-run share cap widens from 0.55x
+  // to 0.65x of the week's own km when the runner has recently been
+  // averaging 3 or fewer runs/week, since a long run then makes up a
+  // bigger share of the week almost by construction.
+  it('widens the generated long-run share for a week built around 3 or fewer runs, holding km the same', () => {
+    function planWithRunsWeek(runsWeek: number) {
+      const history: WeeklyAggregate[] = [
+        ...Array.from({ length: 5 }, (_, i) => week(addWeeks(CURRENT, -(6 - i)), 55)),
+        { ...week(addWeeks(CURRENT, -1), 55), runsWeek },
+      ];
+      const race: Race = {
+        id: 20,
+        name: 'Test ultra',
+        date: addWeeks(CURRENT, 3), // 2-week taper -> peak (build) week lands at CURRENT itself
+        km: 90,
+        dplusM: 4500,
+        dminusM: 4500,
+        targetTimeMin: null,
+        priority: 'A',
+      };
+      return suggestPlan({
+        currentWeekStart: CURRENT,
+        existingPlan: [],
+        races: [race],
+        actualAggregates: history,
+        actualRuns: [],
+        settings: DEFAULTS,
+        horizonWeeks: 1,
+      });
     }
+
+    const fewRuns = planWithRunsWeek(3).find((w) => w.weekStart === CURRENT)!;
+    const manyRuns = planWithRunsWeek(4).find((w) => w.weekStart === CURRENT)!;
+
+    // Same generated km either way -- runsWeek doesn't feed capWeekOnWeek.
+    expect(fewRuns.km).toBeCloseTo(manyRuns.km ?? 0);
+    expect(fewRuns.longRunKm).toBeCloseTo(DEFAULTS.longRunShareCap.fewRunsFactor * (fewRuns.km ?? 0));
+    expect(manyRuns.longRunKm).toBeCloseTo(DEFAULTS.longRunShareCap.manyRunsFactor * (manyRuns.km ?? 0));
+    expect(fewRuns.longRunKm ?? 0).toBeGreaterThan(manyRuns.longRunKm ?? 0);
   });
 
   // v1.1 review round 3 item 1: fix 5 wasn't actually holding in the real

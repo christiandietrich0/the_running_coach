@@ -47,6 +47,11 @@ export interface Defaults {
   // Recovery's long run is a flat cap, not an LR30-based rule (A-round 2
   // item 2).
   recoveryLongRunCapKm: number;
+  // The long-run global cap's "x this week's own km" share (A1) isn't one
+  // fixed fraction: a week built around 3 or fewer runs necessarily puts a
+  // bigger share of its total into the long run than one spread over 4+
+  // (v1.1 review round 5 item 2).
+  longRunShareCap: { runsThreshold: number; fewRunsFactor: number; manyRunsFactor: number };
   // A race week's planned km includes shakeout runs on top of the race
   // itself (A-round 2 item 4).
   raceWeekShakeouts: { count: number; kmEach: number };
@@ -91,6 +96,7 @@ export const DEFAULTS: Defaults = {
   taperB: { weeks: 1, pct: 0.65 },
   postRaceRecoveryPctOfPeak: 0.3,
   recoveryLongRunCapKm: 15,
+  longRunShareCap: { runsThreshold: 3, fewRunsFactor: 0.65, manyRunsFactor: 0.55 },
   raceWeekShakeouts: { count: 2, kmEach: 5 },
   maxWeekKm: 80,
   maxLongRunKm: 55,
