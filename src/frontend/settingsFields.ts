@@ -13,6 +13,14 @@ export interface SettingsGroup {
   fields: SettingsFieldDescriptor[];
 }
 
+// The two caps shown up top on Settings, outside "Advanced" (v1.1 UI
+// pass): the two limits Christian is most likely to want to hand-tune
+// himself, without wading through every mechanics-brief threshold.
+export const PERSONAL_CAP_FIELDS: SettingsFieldDescriptor[] = [
+  { label: 'Max week (km)', path: ['maxWeekKm'], step: 1 },
+  { label: 'Max long run (km)', path: ['maxLongRunKm'], step: 1 },
+];
+
 export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     title: 'Chronic reference and ratio',
@@ -30,7 +38,6 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
     fields: [
       { label: 'Long run cap (x LR30) - also the hard invariant, over this is red', path: ['longRunCapFactor'], step: 0.05 },
       { label: 'LR30 window (days)', path: ['lr30WindowDays'], step: 1 },
-      { label: 'Max long run (km)', path: ['maxLongRunKm'], step: 1 },
       { label: 'Long run share cap: runs/week threshold, at or under this counts as few', path: ['longRunShareCap', 'runsThreshold'], step: 1 },
       { label: 'Long run share cap: few-runs fraction (x week km)', path: ['longRunShareCap', 'fewRunsFactor'], step: 0.05 },
       { label: 'Long run share cap: many-runs fraction (x week km)', path: ['longRunShareCap', 'manyRunsFactor'], step: 0.05 },
@@ -96,10 +103,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   },
   {
     title: 'Life caps',
-    fields: [
-      { label: 'Max week (km)', path: ['maxWeekKm'], step: 1 },
-      { label: 'Run merge gap (minutes)', path: ['runMergeGapMin'], step: 1 },
-    ],
+    fields: [{ label: 'Run merge gap (minutes)', path: ['runMergeGapMin'], step: 1 }],
   },
 ];
 

@@ -2,7 +2,11 @@
 // (whatever the browser actually requests) and keeps the last successful
 // GET /api/state, so opening from the home screen is instant and works
 // offline with the last-known state (technical brief section 8).
-const CACHE_NAME = 'wlp-v1';
+// Renamed from wlp-* to legroom-* (v1.1 UI pass rebrand) and bumped so
+// every client picks up the new shell/assets instead of a stale cached
+// one -- the activate handler below already deletes any cache key that
+// doesn't match this one.
+const CACHE_NAME = 'legroom-v2';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

@@ -47,13 +47,11 @@ export function Chart({ state }: { state: StateResponse }) {
           ))}
         </div>
 
-        <WeekChart weeks={weeks} metric={metric} settings={state.settings} />
-
         <div class="chart-legend">
           {metric !== 'dminus' && (
             <span class="legend-item">
               <span class="legend-swatch" style={{ background: 'var(--blue)' }} />
-              Low volume
+              Low
             </span>
           )}
           <span class="legend-item">
@@ -66,11 +64,11 @@ export function Chart({ state }: { state: StateResponse }) {
           </span>
           <span class="legend-item">
             <span class="legend-swatch" style={{ background: 'var(--red)' }} />
-            Overloaded
+            Over
           </span>
           <span class="legend-item">
             <span class="legend-swatch" style={{ background: 'var(--fg)' }} />
-            {metric === 'dminus' ? 'Longest descent' : 'Long run'}
+            {metric === 'dminus' ? 'Longest' : 'LR'}
           </span>
           <span class="legend-item">
             <span class="legend-swatch legend-swatch-line" />
@@ -85,6 +83,8 @@ export function Chart({ state }: { state: StateResponse }) {
             Race
           </span>
         </div>
+
+        <WeekChart weeks={weeks} metric={metric} settings={state.settings} currentWeekStart={state.currentWeekStart} />
       </div>
     </div>
   );

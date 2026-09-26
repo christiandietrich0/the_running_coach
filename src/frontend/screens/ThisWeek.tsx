@@ -4,7 +4,9 @@ import { NextRaceCard } from '../components/NextRaceCard';
 import { PlanUpdatedNote } from '../components/PlanUpdatedNote';
 import { RunsList } from '../components/RunsList';
 import { VerdictBadge } from '../components/VerdictBadge';
+import { WeekHeadline } from '../components/WeekHeadline';
 import { WeekNumbers } from '../components/WeekNumbers';
+import { weekChipLabel } from '../labels';
 import { getLastSeenPlanUpdate, setLastSeenPlanUpdate } from '../storage';
 import type { StateResponse } from '../types';
 
@@ -28,11 +30,19 @@ export function ThisWeek({ state, onOpenCheckin }: { state: StateResponse; onOpe
     return <p class="muted">No data for this week yet.</p>;
   }
 
+  const chip = weekChipLabel(week, state.races);
+
   return (
     <div class="screen">
+      <div class="week-chip-row">
+        <span class={`week-chip${chip.isRace ? ' week-chip-race' : ''}`}>{chip.text}</span>
+      </div>
+
       <VerdictBadge colour={week.verdict.colour} reason={week.verdict.reason} />
 
       {showPlanUpdated && <PlanUpdatedNote onDismiss={handleDismissPlanUpdated} />}
+
+      <WeekHeadline week={week} />
 
       <div class="card">
         <WeekNumbers week={week} settings={state.settings} />

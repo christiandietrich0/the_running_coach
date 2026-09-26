@@ -1,23 +1,29 @@
-# Weekly Load Planner
+# Legroom
 
-A single-user PWA that pulls run history from intervals.icu and shows,
-per week: a verdict colour, a weekly km range, the max long run, and the
-max descent. See `docs/training_planner_mechanics_brief.md` for the rules
-and `docs/training_planner_technical_brief.md` for the architecture. The
-build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
+*How much room your legs have this week.*
 
-Status: **v1.1 (logic fixes) in progress.** v1 shipped, deployed behind
-Cloudflare Access, live on Christian's iPhone home screen. After a week of
-real use, a first round of logic bugs (A1-A7: the long-run cap formula,
-the LR30/D30 reference date, race-driven plan structure, fixed taper
-percentages, the in-progress week's verdict, feasibility) and a second
-round (hard long-run invariants applied to every week including edited
-ones, a dedicated post-race Recovery week type, "Reset to suggested",
-race-week shakeouts and race name display, a hard +30% week-on-week cap on
-suggestPlan's own output, and a fixed This Week verdict reason line) were
-found and fixed; see the git log for the exact commits. The UI visual pass
-(new screens/styling) is still pending. Migration `0002_plan_race_id.sql`
-needs `npm run db:migrate:remote` on next deploy.
+A single-user PWA (formerly "Weekly Load Planner") that pulls run history
+from intervals.icu and shows, per week: a verdict colour, a weekly km
+range, the max long run, and the max descent. See
+`docs/training_planner_mechanics_brief.md` for the rules and
+`docs/training_planner_technical_brief.md` for the architecture. The build
+plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
+
+Status: **v1.1 (logic fixes) complete, UI visual pass done.** v1 shipped,
+deployed behind Cloudflare Access, live on Christian's iPhone home screen.
+Six rounds of post-launch logic review (the long-run cap formula, the
+LR30/D30 reference date, race-driven plan structure, fixed taper
+percentages, the in-progress week's verdict, feasibility, hard long-run
+invariants applied to every week including edited ones, a dedicated
+post-race Recovery week type, "Reset to suggested", race-week shakeouts
+and race name display, the hard +30% week-on-week cap and its base
+formula, the long-run share cap, auto-regenerating the plan after sync,
+and clamping suggestPlan's own output to green) were found and fixed; see
+the git log for the exact commits -- logic is now frozen. The visual/
+naming pass (this round: renamed to Legroom, new accent colour and
+typography, redesigned screens) is done. Migrations `0002_plan_race_id.sql`
+and `0003_sync_meta.sql` need `npm run db:migrate:remote` if not already
+applied.
 
 ## Architecture
 
@@ -130,13 +136,30 @@ when there isn't one yet.
 
 ## Frontend screens
 
-- **This Week** (`screens/ThisWeek.tsx`): verdict, the three progress
-  stats, this week's runs, check-in prompt, next race card.
+One accent colour (indigo, `--accent`) for every interactive/brand
+element; status colours (green/yellow/red/blue, plus violet for race
+identity) are reserved for status and never doubled up as the accent.
+`src/frontend/labels.ts`'s `weekChipLabel()` is the single source for the
+week-type chip text ("Build week", "Taper week 1 of 2", "Peak week",
+"Race day -- <name>", ...), shared by This Week and Plan.
+
+- **This Week** (`screens/ThisWeek.tsx`): week-type chip, a small
+  dot-plus-one-line verdict (no banner), a big "X to Y km left" / "Z km
+  done" headline (`components/WeekHeadline.tsx`, sourced from
+  `state.weeks[current].guidance` -- the same `remainingWeekGuidance()`
+  figures as before, just exposed as data instead of pre-formatted into
+  `verdict.reason`), the three progress stats with the cap spelled out in
+  words and ratios/references tucked behind a "Show ratios and
+  references" tap, this week's runs, check-in prompt, next race card.
 - **Chart** (`screens/Chart.tsx` + `components/WeekChart.tsx`, Chart.js):
-  12 weeks back (solid bars) through the plan's lookahead (hatched),
-  colour bands, a long-run/descent dot with its cap line, a km / effort-km
-  / descent toggle. Two spec gaps filled by interpretation, flagged for
-  Christian:
+  12 weeks back (solid bars) through the plan's lookahead (lighter,
+  thin-hatched), colour bands, a long-run/descent dot with its cap line, a
+  dashed "Today" divider between actual and planned, a small flag + name
+  above a race week's bar, the y max clamped to 1.2x the largest bar (so
+  one outlier reference no longer stretches the whole axis), a tap
+  tooltip with type/km/LR/D-/verdict, a km / effort-km / descent toggle,
+  and a two-line legend under the toggle. Two spec gaps filled by
+  interpretation, flagged for Christian:
   - Colour bands: km and effort-km both use the km-based chronic
     reference C (mechanics brief 3.3 says effort-km uses "the same
     ratio" but doesn't define a separate effort-km chronic reference);
@@ -145,17 +168,27 @@ when there isn't one yet.
   - The long-run dot switches to single-run descent (with the D30 x 1.20
     cap line) when the descent toggle is active, rather than staying on
     a km scale that wouldn't fit the metres axis.
-
-  Known rough edge: the real history includes one very large race
-  descent, which stretches the descent toggle's y-axis so smaller weeks
-  flatten out. Worth a decision (log scale, or clip the axis and let
-  outliers overflow) once there's more race history to judge it against.
-- **Plan** (`screens/Plan.tsx`): the upcoming-weeks list (type chip, km /
-  long run / D+ / D-, verdict dot), tap a row to edit it inline (sets
-  `user_edited`, with Limited's days/km-cap fields appearing only for
-  that type), and a "Suggest plan" button that runs the auto-fill.
-- **Races** (`screens/Races.tsx`): add/edit/delete, each race showing its
-  targets, taper schedule and feasibility.
+- **Plan** (`screens/Plan.tsx`): each row is a mini bar (km against its
+  own corridor ceiling, falling back to the account's max-week cap when
+  the corridor is open -- Race/Taper/Recovery -- so the bar stays
+  meaningful instead of reading a constant ~95% full) with a dot marking
+  the long run and the km figure to the right; a race's taper + race +
+  post-race recovery rows are visually grouped in one bordered block; the
+  current week's row shows its corridor target alongside the actual done
+  so far; "Rebuild plan" previews a diff ("N weeks will change", via a new
+  non-persisting `POST /api/plan/preview` that calls the exact same
+  `suggestPlan()` regeneratePlan() does) before Apply actually persists
+  it; a capped peak week shows a small grey "Peak week capped at X km
+  (race target Y km)" line, not a warning. Edited/Limited weeks are never
+  touched by Rebuild plan, same as before.
+- **Races** (`screens/Races.tsx`): add/edit/delete; priority is a
+  segmented A/B/C control with a one-line explanation of what it changes
+  (taper length); the taper block shows each taper week's actual calendar
+  date and its real generated km (looked up from `state.weeks`), not a
+  volume percentage; feasibility and the peak-week-capped note prefer the
+  actual generated week's numbers over feasibility's own growth-rate
+  estimate, which can read more optimistic (C is a rolling mean, not a
+  value that jumps straight to a new level).
 
 Every write on Plan/Races hands the fresh `GET /api/state` response
 (already returned by the write endpoint itself) straight to `App.tsx`'s
@@ -175,21 +208,24 @@ exists for it; the real numbers always win. Covered by a new test in
   skipped this week (tracked client-side in `localStorage`, since
   "skipped" isn't a concept the backend needs to know about); also
   reachable any time by tapping the This Week check-in banner.
-- **Settings** (`screens/Settings.tsx`): a sync-now button, the
-  include-hikes toggle, every `defaults.ts` parameter grouped to match
-  mechanics brief section 9 (`src/frontend/settingsFields.ts` is the
-  single source of field labels/grouping), and the race-override list
-  (mechanics brief 8.5's "race overrides for past activities") backed by
-  the new `GET /api/activities` endpoint. Saving diffs the edited object
-  against what was loaded and only sends the top-level keys that changed.
+- **Settings** (`screens/Settings.tsx`): sync-now, the include-hikes
+  toggle, the two personal caps (max week km, max long run km) and the
+  build version/date up top; every other `defaults.ts` parameter grouped
+  to match mechanics brief section 9 (`src/frontend/settingsFields.ts` is
+  the single source of field labels/grouping) lives behind a collapsed
+  "Advanced" disclosure; the race-override list (mechanics brief 8.5's
+  "race overrides for past activities") backed by `GET /api/activities`.
+  Saving diffs the edited object against what was loaded and only sends
+  the top-level keys that changed. The build stamp (`__BUILD_VERSION__`,
+  date + short git hash) is injected by `vite.config.ts` at build time.
 
 ## PWA
 
 `src/frontend/public/` holds everything Vite copies through unmodified:
-`manifest.json` (standalone display, two icon sizes), placeholder icons
-(a plain mountain glyph -- swap for real branding whenever), and
-`sw.js`, a hand-written service worker (no build plugin, to keep the
-dependency list as it is):
+`manifest.json` (standalone display, two icon sizes), the Legroom icon
+(`icons/icon-source.svg`, two rounded bars in the accent colour,
+rasterized to the PNG set with `sharp`), and `sw.js`, a hand-written
+service worker (no build plugin, to keep the dependency list as it is):
 
 - `GET /api/state` is network-first, caching the latest successful
   response and falling back to it when offline -- last-known state

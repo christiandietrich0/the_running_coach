@@ -1,19 +1,20 @@
 import { daysUntil, fmtKm, fmtM } from '../format';
 import { FEASIBILITY_LABEL } from '../labels';
-import type { RaceState } from '../types';
+import type { RaceState, WeekState } from '../types';
 
 function fmtDate(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-function fmtPct(pct: number): string {
-  return `${Math.round(pct * 100)}%`;
+function fmtShortDate(dateStr: string): string {
+  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 export function RaceCard({
   race,
   today,
   peakWeekKm,
+  weeksByStart,
   onEdit,
   onDelete,
   deleting,
@@ -29,6 +30,10 @@ export function RaceCard({
   // back to feasibility.maxReachableWeekKm only when no such week exists
   // yet (e.g. the plan hasn't been regenerated since the race was added).
   peakWeekKm: number | null;
+  // state.weeks keyed by weekStart, so the taper block can show each
+  // taper week's actual generated km and date (v1.1 UI pass) instead of
+  // just its volume fraction.
+  weeksByStart: Map<string, WeekState>;
   onEdit: () => void;
   onDelete: () => void;
   deleting: boolean;
@@ -88,12 +93,18 @@ export function RaceCard({
       {targets.taper.length > 0 && (
         <div class="taper-list">
           <div class="stat-label">Taper</div>
-          {targets.taper.map((t) => (
-            <div class="race-target-row" key={t.weekStart}>
-              <span class="muted">{t.label}</span>
-              <span>{fmtPct(t.volumePct)} of peak</span>
-            </div>
-          ))}
+          {targets.taper.map((t) => {
+            const week = weeksByStart.get(t.weekStart);
+            return (
+              <div class="taper-row" key={t.weekStart}>
+                <span class="taper-row-label">
+                  {t.label}
+                  <span class="taper-row-date">{fmtShortDate(t.weekStart)}</span>
+                </span>
+                <span>{week ? `${fmtKm(week.kmWeek)} km` : '--'}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 

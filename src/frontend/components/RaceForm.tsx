@@ -7,6 +7,14 @@ function numOrNull(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const PRIORITIES: RacePatch['priority'][] = ['A', 'B', 'C'];
+
+const PRIORITY_HINT: Record<RacePatch['priority'], string> = {
+  A: 'Full taper: peak, then 2-3 weeks easing into race day.',
+  B: 'Short taper: 1 week easing in before race day.',
+  C: 'Train through -- no taper, race day is just another week.',
+};
+
 export function RaceForm({
   race,
   saving,
@@ -58,20 +66,27 @@ export function RaceForm({
         <input type="text" value={name} onInput={(e) => setName(e.currentTarget.value)} placeholder="Race name" />
       </label>
 
-      <div class="field-row">
-        <label class="field">
-          <span>Date</span>
-          <input type="date" value={date} onInput={(e) => setDate(e.currentTarget.value)} />
-        </label>
-        <label class="field">
-          <span>Priority</span>
-          <select value={priority} onChange={(e) => setPriority(e.currentTarget.value as RacePatch['priority'])}>
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-          </select>
-        </label>
-      </div>
+      <label class="field">
+        <span>Date</span>
+        <input type="date" value={date} onInput={(e) => setDate(e.currentTarget.value)} />
+      </label>
+
+      <label class="field">
+        <span>Priority</span>
+        <div class="segmented">
+          {PRIORITIES.map((p) => (
+            <button
+              key={p}
+              type="button"
+              class={`segmented-option${priority === p ? ' segmented-option-active' : ''}`}
+              onClick={() => setPriority(p)}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+        <span class="segmented-hint">{PRIORITY_HINT[priority]}</span>
+      </label>
 
       <div class="field-row">
         <label class="field">

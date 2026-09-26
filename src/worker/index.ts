@@ -1,7 +1,7 @@
 import { handleListActivities, handlePutActivityOverride } from './routes/activities';
 import { handlePutCheckin } from './routes/checkin';
 import { handleHealth } from './routes/health';
-import { handlePutPlanWeek, handleResetPlanWeek, handleSuggestPlan } from './routes/plan';
+import { handlePreviewPlan, handlePutPlanWeek, handleResetPlanWeek, handleSuggestPlan } from './routes/plan';
 import { handleDeleteRace, handlePutRace } from './routes/races';
 import { handlePutSettings } from './routes/settings';
 import { handleState } from './routes/state';
@@ -25,6 +25,7 @@ export default {
     if (pathname === '/api/state' && method === 'GET') return handleState(request, env);
     if (pathname === '/api/settings' && method === 'PUT') return handlePutSettings(request, env);
     if (pathname === '/api/plan/suggest' && method === 'POST') return handleSuggestPlan(request, env);
+    if (pathname === '/api/plan/preview' && method === 'POST') return handlePreviewPlan(request, env);
     if (pathname === '/api/activities' && method === 'GET') return handleListActivities(request, env);
 
     let match = pathname.match(/^\/api\/plan\/([^/]+)$/);

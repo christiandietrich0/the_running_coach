@@ -28,6 +28,12 @@ export async function suggestPlan(): Promise<StateResponse> {
   return readStateOrThrow(res, 'POST /api/plan/suggest');
 }
 
+export async function previewPlan(): Promise<{ changedWeeks: string[] }> {
+  const res = await fetch('/api/plan/preview', { method: 'POST' });
+  if (!res.ok) throw new Error(`POST /api/plan/preview failed: ${res.status}`);
+  return res.json();
+}
+
 export async function resetPlanWeek(weekStart: string): Promise<StateResponse> {
   const res = await fetch(`/api/plan/${weekStart}`, { method: 'DELETE' });
   return readStateOrThrow(res, 'DELETE /api/plan/:week');

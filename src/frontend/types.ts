@@ -63,6 +63,17 @@ export interface WeekState {
   raceId: number | null;
   raceName: string | null;
   peakForRaceId: number | null;
+  taperForRaceId: number | null;
+  recoveryForRaceId: number | null;
+  guidance: WeekGuidance | null;
+}
+
+export interface WeekGuidance {
+  rebuilding: boolean;
+  targetMet: boolean;
+  floorReachable: boolean;
+  kmLeftMin: number | null;
+  kmLeftMax: number | null;
 }
 
 export interface TaperWeek {

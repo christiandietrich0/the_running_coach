@@ -74,6 +74,30 @@ export interface WeekStateDTO {
   // green-max clamp actually bit -- cross-referenced against that race's
   // targets.peakWeekEffortKm on the frontend, the same way raceName is.
   peakForRaceId: number | null;
+  // Set only on a race-driven TAPER week for this race (v1.1 review UI
+  // pass), so the row/chip can show "Taper week N of M" -- cross-
+  // referenced against that race's targets.taper on the frontend.
+  taperForRaceId: number | null;
+  // Set only on a race-driven post-race Recovery week for this race (v1.1
+  // review UI pass), so the Plan screen can visually group taper + race +
+  // recovery rows together around the race.
+  recoveryForRaceId: number | null;
+  // Structured "how much is left this week" (v1.1 review round 3 item 2),
+  // for the current week only, when on track: the same figures
+  // remainingWeekGuidance() already computed, just exposed as data
+  // instead of pre-formatted into verdict.reason (v1.1 UI pass) so the
+  // frontend can lay them out as its own big headline. Null whenever the
+  // old code wouldn't have appended anything (not the current week, not
+  // green, or no bounded corridor yet).
+  guidance: WeekGuidanceDTO | null;
+}
+
+export interface WeekGuidanceDTO {
+  rebuilding: boolean; // refs.C <= 0 -- no chronic history yet
+  targetMet: boolean;
+  floorReachable: boolean;
+  kmLeftMin: number | null;
+  kmLeftMax: number | null;
 }
 
 export interface RaceStateDTO extends Race {
@@ -190,6 +214,8 @@ export async function buildState(env: Env): Promise<StateResponse> {
     const raceName = raceId != null ? (races.find((r) => r.id === raceId)?.name ?? null) : null;
     const slot = raceSlots.get(w.weekStart);
     const peakForRaceId = slot?.kind === 'PEAK' ? slot.race.id : null;
+    const taperForRaceId = slot?.kind === 'TAPER' ? slot.race.id : null;
+    const recoveryForRaceId = slot?.kind === 'POST_RECOVERY' ? slot.race.id : null;
 
     // A Race week gets a distinct, neutral verdict, not "on track" (v1.1
     // review round 4 item 1): flags() already returned no flags for it, so
@@ -198,19 +224,19 @@ export async function buildState(env: Env): Promise<StateResponse> {
       v = { colour: 'RACE', reason: raceName ? `Race day: ${raceName}.` : 'Race day.', flags: [] };
     }
 
-    // The generic "On track." reason just repeats the title above it on
-    // This Week; for the current week, replace it with the remaining
-    // headroom instead, so it's one informative line instead of a
-    // duplicate (v1.1 review A-round 2 item 6, redesigned per round 3 item
-    // 2): the green range (0.8-1.2x C) is the acceptable floor/ceiling, the
-    // Build/Hold corridor is only the "target", and both get capped by
-    // what actually fits in the days left this week.
+    // "How much is left this week", for the current week only, when on
+    // track (v1.1 review A-round 2 item 6, redesigned per round 3 item 2,
+    // restructured as data per the v1.1 UI pass): the green range (0.8-1.2x
+    // C) is the acceptable floor/ceiling, the Build/Hold corridor is only
+    // the "target", and both get capped by what actually fits in the days
+    // left this week. The frontend lays this out as its own big headline
+    // instead of a sentence appended to verdict.reason.
+    let guidance: WeekGuidanceDTO | null = null;
     if (w.weekStart === currentWeekStart && v.colour === 'GREEN') {
-      const parts: string[] = [];
       if (refs.C <= 0) {
-        parts.push('rebuilding -- not enough history yet');
+        guidance = { rebuilding: true, targetMet: false, floorReachable: false, kmLeftMin: null, kmLeftMax: null };
       } else if (Number.isFinite(c.kmMax)) {
-        const guidance = remainingWeekGuidance({
+        const g = remainingWeekGuidance({
           doneKm: w.kmWeek,
           C: refs.C,
           greenMinFactor: settings.ratioZoneEdges.greenMin,
@@ -218,19 +244,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
           lrMax: c.lrMax,
           remainingDays,
         });
-        if (guidance.targetMet) {
-          parts.push('weekly target met');
-        } else if (!guidance.floorReachable) {
-          parts.push("floor not reachable this week, that's fine");
-        } else {
-          parts.push(`${guidance.kmLeftMin.toFixed(0)} to ${guidance.kmLeftMax.toFixed(0)} km left`);
-        }
-      }
-      if (Number.isFinite(c.lrMax)) {
-        parts.push(`long run up to ${c.lrMax.toFixed(0)} km`);
-      }
-      if (parts.length > 0) {
-        v = { ...v, reason: `${v.reason} ${parts.join(', ')}.` };
+        guidance = { rebuilding: false, targetMet: g.targetMet, floorReachable: g.floorReachable, kmLeftMin: g.kmLeftMin, kmLeftMax: g.kmLeftMax };
       }
     }
 
@@ -269,6 +283,9 @@ export async function buildState(env: Env): Promise<StateResponse> {
       raceId,
       raceName,
       peakForRaceId,
+      taperForRaceId,
+      recoveryForRaceId,
+      guidance,
     };
   });
 

@@ -47,7 +47,10 @@ export function App() {
 
   return (
     <div>
-      <h1 class="app-title">Weekly Load Planner</h1>
+      <div class="app-header">
+        <h1 class="app-title">Legroom</h1>
+        <p class="app-tagline">How much room your legs have this week.</p>
+      </div>
       {error && (
         <div class="card">
           <p class="muted">Could not load your data: {error}</p>

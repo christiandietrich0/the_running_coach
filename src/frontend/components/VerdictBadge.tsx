@@ -1,26 +1,21 @@
+import { FLAG_COLOUR_LABEL as LABEL } from '../labels';
 import type { FlagColour } from '../types';
 
-const LABEL: Record<FlagColour, string> = {
-  GREEN: 'On track',
-  BLUE: 'Low volume',
-  YELLOW: 'Caution',
-  RED: 'Overloaded',
-  RACE: 'Race day',
-};
-
+// A small dot + one line, not a big banner (v1.1 UI pass): the status
+// colour lives on the dot only, text stays in --fg/--muted so it's always
+// legible regardless of hue. A plain "on track, no flags at all" week's
+// reason is just "On track." -- the same as the label -- so it's skipped
+// rather than repeated (same fix as v1.1 A-round 2 item 6, updated now
+// that the "km left" headline lives in its own big-number card instead of
+// being appended to this reason).
 export function VerdictBadge({ colour, reason }: { colour: FlagColour; reason: string }) {
+  const showReason = !(colour === 'GREEN' && reason.trim() === 'On track.');
+
   return (
-    <div class={`verdict verdict-${colour.toLowerCase()}`}>
-      <span class="verdict-dot" />
-      <div>
-        {/* On green, `reason` is already a full "On track. ..." sentence
-            (v1.1 review A-round 2 item 6): a separate title would just
-            repeat it as "On track / On track. ...". Non-green reasons are
-            each their own specific flag text, so the title still adds
-            useful at-a-glance context there. */}
-        {colour !== 'GREEN' && <div class="verdict-label">{LABEL[colour]}</div>}
-        <div class="verdict-reason">{reason}</div>
-      </div>
+    <div class="verdict-row">
+      <span class={`dot dot-${colour.toLowerCase()}`} />
+      <span class="verdict-row-label">{LABEL[colour]}.</span>
+      {showReason && <span class="verdict-row-reason">{reason}</span>}
     </div>
   );
 }

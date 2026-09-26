@@ -14,6 +14,7 @@ export function Races({ state, onStateChange }: { state: StateResponse; onStateC
 
   const races = [...state.races].sort((a, b) => (a.date < b.date ? -1 : 1));
   const editingRace: RaceState | null = typeof editing === 'number' ? (races.find((r) => r.id === editing) ?? null) : null;
+  const weeksByStart = new Map(state.weeks.map((w) => [w.weekStart, w]));
 
   async function handleSave(patch: RacePatch) {
     setSaving(true);
@@ -76,6 +77,7 @@ export function Races({ state, onStateChange }: { state: StateResponse; onStateC
             race={race}
             today={state.today}
             peakWeekKm={state.weeks.find((w) => w.peakForRaceId === race.id)?.kmWeek ?? null}
+            weeksByStart={weeksByStart}
             onEdit={() => setEditing(race.id)}
             onDelete={() => handleDelete(race.id)}
             deleting={deletingId === race.id}

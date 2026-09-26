@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { putSettings } from '../api';
-import { getPath, setPath, SETTINGS_GROUPS } from '../settingsFields';
+import { getPath, PERSONAL_CAP_FIELDS, setPath, SETTINGS_GROUPS } from '../settingsFields';
 import type { Settings, StateResponse } from '../types';
 
 export function SettingsForm({ state, onStateChange }: { state: StateResponse; onStateChange: (s: StateResponse) => void }) {
@@ -9,6 +9,7 @@ export function SettingsForm({ state, onStateChange }: { state: StateResponse; o
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   function updateField(path: string[], value: number) {
     setDraft((d) => setPath(d, path, value));
@@ -50,26 +51,55 @@ export function SettingsForm({ state, onStateChange }: { state: StateResponse; o
           <input type="checkbox" checked={includeHikes} onChange={(e) => setIncludeHikes(e.currentTarget.checked)} />
           <span>Include Walk and Hike activities</span>
         </label>
+
+        <div class="settings-caps-grid">
+          {PERSONAL_CAP_FIELDS.map((field) => (
+            <label class="field" key={field.path.join('.')}>
+              <span>{field.label}</span>
+              <input
+                type="number"
+                step={field.step}
+                value={getPath(draft, field.path)}
+                onInput={(e) => updateField(field.path, Number(e.currentTarget.value))}
+              />
+            </label>
+          ))}
+        </div>
+
+        <div class="settings-build-info">
+          <span>Build {__BUILD_VERSION__}</span>
+        </div>
       </div>
 
-      {SETTINGS_GROUPS.map((group) => (
-        <div class="card" key={group.title}>
-          <div class="card-title">{group.title}</div>
-          <div class="settings-grid">
-            {group.fields.map((field) => (
-              <label class="field" key={field.path.join('.')}>
-                <span>{field.label}</span>
-                <input
-                  type="number"
-                  step={field.step}
-                  value={getPath(draft, field.path)}
-                  onInput={(e) => updateField(field.path, Number(e.currentTarget.value))}
-                />
-              </label>
+      <div class="card">
+        <button type="button" class="advanced-toggle" onClick={() => setAdvancedOpen((o) => !o)}>
+          <span>Advanced (every threshold)</span>
+          <span class={`details-toggle-caret${advancedOpen ? ' details-toggle-caret-open' : ''}`}>&rsaquo;</span>
+        </button>
+
+        {advancedOpen && (
+          <div class="advanced-body">
+            {SETTINGS_GROUPS.map((group) => (
+              <div key={group.title}>
+                <div class="settings-group-title">{group.title}</div>
+                <div class="settings-grid">
+                  {group.fields.map((field) => (
+                    <label class="field" key={field.path.join('.')}>
+                      <span>{field.label}</span>
+                      <input
+                        type="number"
+                        step={field.step}
+                        value={getPath(draft, field.path)}
+                        onInput={(e) => updateField(field.path, Number(e.currentTarget.value))}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-      ))}
+        )}
+      </div>
 
       <div class="card">
         {error && <p class="form-error">{error}</p>}
