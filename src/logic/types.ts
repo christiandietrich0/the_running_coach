@@ -5,7 +5,7 @@ import type { Defaults } from '../worker/defaults';
 
 export type Settings = Defaults;
 
-export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED';
+export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED' | 'RECOVERY';
 
 export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED';
 
@@ -115,6 +115,10 @@ export interface PlanWeek {
   limitedDays: number | null;
   limitedKmCap: number | null;
   userEdited: boolean;
+  // Set only on a RACE week suggestPlan() generated for this race; null
+  // for every other week, including a user edit (v1.1 review A-round 2
+  // item 4: lets the row show the race's name).
+  raceId: number | null;
 }
 
 export interface Race {

@@ -16,7 +16,7 @@ function fail<T>(error: string): ValidationResult<T> {
   return { ok: false, error };
 }
 
-const WEEK_TYPES: WeekType[] = ['BUILD', 'HOLD', 'DOWN', 'TAPER', 'RACE', 'LIMITED'];
+const WEEK_TYPES: WeekType[] = ['BUILD', 'HOLD', 'DOWN', 'TAPER', 'RACE', 'LIMITED', 'RECOVERY'];
 const WEEK_START_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -63,6 +63,9 @@ export function parsePlanPatch(body: unknown): ValidationResult<Omit<PlanWeek, '
     dminusM: (b.dminusM as number | null) ?? null,
     limitedDays: (b.limitedDays as number | null) ?? null,
     limitedKmCap: (b.limitedKmCap as number | null) ?? null,
+    // A manual edit is a custom override, not tied to any particular race
+    // any more, even if it replaces what was a Race/Taper week.
+    raceId: null,
   });
 }
 

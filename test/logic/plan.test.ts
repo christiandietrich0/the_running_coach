@@ -51,6 +51,7 @@ describe('suggestPlan', () => {
       limitedDays: null,
       limitedKmCap: null,
       userEdited: true,
+      raceId: null,
     };
     const plan = suggestPlan({
       currentWeekStart: CURRENT,
@@ -75,6 +76,7 @@ describe('suggestPlan', () => {
       limitedDays: 3,
       limitedKmCap: 20,
       userEdited: true,
+      raceId: null,
     };
     const plan = suggestPlan({
       currentWeekStart: CURRENT,
@@ -112,7 +114,10 @@ describe('suggestPlan', () => {
 
     const raceWeek = plan.find((w) => w.weekStart === race.date)!;
     expect(raceWeek.type).toBe('RACE');
-    expect(raceWeek.km).toBeCloseTo(race.km);
+    // Race km + shakeouts (v1.1 review A-round 2 item 4), long run stays
+    // the race distance itself.
+    expect(raceWeek.km).toBeCloseTo(race.km + DEFAULTS.raceWeekShakeouts.count * DEFAULTS.raceWeekShakeouts.kmEach);
+    expect(raceWeek.longRunKm).toBeCloseTo(race.km);
 
     const taperWeeks = plan.filter((w) => w.type === 'TAPER');
     expect(taperWeeks.length).toBeGreaterThan(0);
@@ -132,6 +137,7 @@ describe('suggestPlan', () => {
       limitedDays: 2,
       limitedKmCap: 15,
       userEdited: false, // Limited is locked on its own, even without userEdited
+      raceId: null,
     };
     const plan = suggestPlan({
       currentWeekStart: CURRENT,
@@ -147,9 +153,10 @@ describe('suggestPlan', () => {
 
   // v1.1 review A3: races drive the plan directly -- race week, its taper
   // weeks, and (pulled forward from v2) the two recovery weeks right after
-  // it, Limited then Down.
+  // it, Recovery then Down (Recovery is its own week type per A-round 2
+  // item 2, not the user-declared Limited).
   describe('race-driven structure (A3)', () => {
-    it('inserts the race week, taper weeks, and a post-race Limited then Down week', () => {
+    it('inserts the race week, taper weeks, and a post-race Recovery then Down week', () => {
       const race: Race = {
         id: 1,
         name: 'Test 100k',
@@ -173,20 +180,22 @@ describe('suggestPlan', () => {
 
       const raceWeek = byWeek.get(race.date)!;
       expect(raceWeek.type).toBe('RACE');
-      expect(raceWeek.km).toBeCloseTo(race.km);
+      expect(raceWeek.km).toBeCloseTo(race.km + DEFAULTS.raceWeekShakeouts.count * DEFAULTS.raceWeekShakeouts.kmEach);
       expect(raceWeek.longRunKm).toBeCloseTo(race.km);
       expect(raceWeek.dplusM).toBeCloseTo(race.dplusM);
       expect(raceWeek.dminusM).toBeCloseTo(race.dminusM);
+      expect(raceWeek.raceId).toBe(race.id);
 
       const taperWeek = byWeek.get(addWeeks(race.date, -1))!;
       expect(taperWeek.type).toBe('TAPER');
 
       const weekAfter1 = byWeek.get(addWeeks(race.date, 1))!;
       const weekAfter2 = byWeek.get(addWeeks(race.date, 2))!;
-      expect(weekAfter1.type).toBe('LIMITED');
+      expect(weekAfter1.type).toBe('RECOVERY');
       expect(weekAfter2.type).toBe('DOWN');
       expect(weekAfter1.limitedKmCap).toBeGreaterThan(0);
       expect(weekAfter1.km).toBeCloseTo(weekAfter1.limitedKmCap!);
+      expect(weekAfter1.longRunKm ?? 0).toBeLessThanOrEqual(DEFAULTS.recoveryLongRunCapKm + 1e-6);
     });
 
     it('raceStructureSlots/raceSlotWeekType expose the same structure for conflict detection', () => {
@@ -195,7 +204,7 @@ describe('suggestPlan', () => {
 
       expect(raceSlotWeekType(slots.get(addWeeks(race.date, -1))!.kind)).toBe('TAPER');
       expect(raceSlotWeekType(slots.get(race.date)!.kind)).toBe('RACE');
-      expect(raceSlotWeekType(slots.get(addWeeks(race.date, 1))!.kind)).toBe('LIMITED');
+      expect(raceSlotWeekType(slots.get(addWeeks(race.date, 1))!.kind)).toBe('RECOVERY');
       expect(raceSlotWeekType(slots.get(addWeeks(race.date, 2))!.kind)).toBe('DOWN');
     });
 
@@ -211,6 +220,7 @@ describe('suggestPlan', () => {
         limitedDays: null,
         limitedKmCap: null,
         userEdited: true,
+        raceId: null,
       };
       const plan = suggestPlan({
         currentWeekStart: CURRENT,
@@ -305,6 +315,43 @@ describe('suggestPlan', () => {
       expect(w.longRunKm).toBeLessThanOrEqual(DEFAULTS.maxLongRunKm + 1e-6);
       if (w.km != null) {
         expect(w.longRunKm).toBeLessThanOrEqual(w.km + 1e-6);
+      }
+    }
+  });
+
+  // v1.1 review A-round 2 item 5: "suggestPlan must only produce green
+  // weeks" -- a hard +30% week-on-week cap on top of the corridor, so a
+  // week never jumps further than the display-side hard-cap flag itself
+  // would allow. Real report: a big dip right before the current week
+  // otherwise let the corridor's C-based midpoint for the very next
+  // (Build) week jump straight back up regardless of that one low week.
+  it('never lets a generated week\'s km exceed 1.30x the previous week\'s km, on top of the corridor', () => {
+    const history: WeeklyAggregate[] = [
+      ...Array.from({ length: 6 }, (_, i) => week(addWeeks(CURRENT, -(7 - i)), 60)),
+      week(addWeeks(CURRENT, -1), 20), // a big dip right before currentWeekStart
+    ];
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [],
+      actualAggregates: history,
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 6,
+    });
+
+    // Without the cap, the corridor's C-based midpoint here would be
+    // ~55 km (C averages the dip in with three 60 km weeks) -- more than
+    // 2.5x the 20 km week right before it.
+    const first = plan.find((w) => w.weekStart === CURRENT)!;
+    expect(first.km ?? 0).toBeLessThanOrEqual(20 * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
+
+    // The cap keeps applying week to week, not just on the first one.
+    let prevKm = 20;
+    for (const w of plan) {
+      if (w.km != null) {
+        expect(w.km).toBeLessThanOrEqual(prevKm * (1 + DEFAULTS.hardWeekOnWeekCapPct) + 1e-6);
+        prevKm = w.km;
       }
     }
   });

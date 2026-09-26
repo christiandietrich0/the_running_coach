@@ -75,18 +75,37 @@ export function applySymptomLock(
   return { type: plannedType, symptomLocked: false, assessment };
 }
 
-function longRunFlag(longestKm: number, LR30: number, settings: Settings): Flag | null {
+// The A1 cap invariants, applied as hard flags on every week -- including
+// user-edited ones (v1.1 review, A-round 2 item 1): a stored long run that
+// outgrew its own week's km, the life cap, or the 10% growth cap is unsafe
+// outright, whatever the ratio to LR30 alone would otherwise read as (a
+// locked week's LR30 can itself be stale/inflated, which used to let a
+// genuinely-too-big long run read as green). Any violation is red; there
+// is no separate yellow tier for this flag any more.
+function longRunFlag(longestKm: number, kmWeek: number, LR30: number, settings: Settings): Flag | null {
   const ratio = ratioOrNull(longestKm, LR30);
+
+  const exceedsWeekKm = longestKm > kmWeek + 1e-9;
+  const exceedsLifeCap = longestKm > settings.maxLongRunKm + 1e-9;
+  const exceedsGrowthCap = ratio != null && ratio > settings.longRunCapFactor;
+
+  if (exceedsWeekKm || exceedsLifeCap || exceedsGrowthCap) {
+    const reason = exceedsWeekKm
+      ? `Long run ${longestKm.toFixed(1)} km is more than this week's own ${kmWeek.toFixed(1)} km.`
+      : exceedsLifeCap
+        ? `Long run ${longestKm.toFixed(1)} km is over your ${settings.maxLongRunKm} km life cap.`
+        : `Long run ${longestKm.toFixed(1)} km is ${Math.round(((ratio as number) - 1) * 100)}% over your 30-day longest (${LR30.toFixed(1)} km).`;
+    return { kind: 'LONG_RUN', colour: 'RED', reason, value: ratio ?? undefined, ref: settings.longRunCapFactor };
+  }
+
   if (ratio == null) return null;
-  let colour: FlagColour = 'GREEN';
-  if (ratio > settings.longRunRedFactor) colour = 'RED';
-  else if (ratio > settings.longRunCapFactor) colour = 'YELLOW';
-  const pct = Math.round((ratio - 1) * 100);
-  const reason =
-    colour === 'GREEN'
-      ? `Long run ${longestKm.toFixed(1)} km is within your 30-day longest (${LR30.toFixed(1)} km).`
-      : `Long run ${longestKm.toFixed(1)} km is ${pct}% over your 30-day longest (${LR30.toFixed(1)} km).`;
-  return { kind: 'LONG_RUN', colour, reason, value: ratio, ref: settings.longRunCapFactor };
+  return {
+    kind: 'LONG_RUN',
+    colour: 'GREEN',
+    reason: `Long run ${longestKm.toFixed(1)} km is within your 30-day longest (${LR30.toFixed(1)} km).`,
+    value: ratio,
+    ref: settings.longRunCapFactor,
+  };
 }
 
 function descentSingleFlag(longestLossM: number, D30: number, settings: Settings): Flag | null {
@@ -158,7 +177,7 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
   out.push({ kind: 'SYMPTOMS', colour: symptoms.colour, reason: symptoms.reason });
 
   if (weekType !== 'RACE') {
-    const lr = longRunFlag(input.longestKm, refs.LR30, settings);
+    const lr = longRunFlag(input.longestKm, input.kmWeek, refs.LR30, settings);
     if (lr) out.push(lr);
   }
 

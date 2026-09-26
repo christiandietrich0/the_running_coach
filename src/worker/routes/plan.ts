@@ -1,5 +1,5 @@
 import { mergeRuns, mondayOf, suggestPlan, weeklyAggregates } from '../../logic';
-import { loadPlanWeeks, loadRaces, loadRawActivities, upsertPlanWeek, upsertPlanWeeks } from '../db';
+import { deletePlanWeek, loadPlanWeeks, loadRaces, loadRawActivities, upsertPlanWeek, upsertPlanWeeks } from '../db';
 import { readJson } from '../http';
 import type { Env } from '../index';
 import { getSettings } from '../settings-store';
@@ -50,5 +50,18 @@ export async function regeneratePlan(env: Env): Promise<void> {
 
 export async function handleSuggestPlan(_request: Request, env: Env): Promise<Response> {
   await regeneratePlan(env);
+  return Response.json(await buildState(env));
+}
+
+// Clears a week's user_edited override and lets suggestPlan() regenerate
+// it (v1.1 review A-round 2 item 3: "Reset to suggested" on an edited
+// week).
+export async function handleResetPlanWeek(_request: Request, env: Env, weekParam: string): Promise<Response> {
+  const weekResult = parseWeekStart(weekParam);
+  if (!weekResult.ok) return Response.json({ error: weekResult.error }, { status: 400 });
+
+  await deletePlanWeek(env, weekResult.value);
+  await regeneratePlan(env);
+
   return Response.json(await buildState(env));
 }

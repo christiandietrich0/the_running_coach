@@ -49,6 +49,10 @@ export interface WeekStateDTO {
   // a newly-added race now needs as its taper. suggestPlan() never
   // overwrites a user-edited week itself, so this is surfaced instead.
   raceConflictType: WeekType | null;
+  // Set only on a RACE week suggestPlan() generated for this race (v1.1
+  // review A-round 2 item 4), so the row can show the race's name.
+  raceId: number | null;
+  raceName: string | null;
 }
 
 export interface RaceStateDTO extends Race {
@@ -141,8 +145,27 @@ export async function buildState(env: Env): Promise<StateResponse> {
       },
       settings,
     );
-    const v = verdict(flagList);
+    let v = verdict(flagList);
     prevKm = w.kmWeek;
+
+    // The generic "On track." reason just repeats the title above it on
+    // This Week; for the current week, replace it with the same remaining
+    // headroom the corridor already computed, so it's one informative line
+    // instead of a duplicate (v1.1 review A-round 2 item 6).
+    if (w.weekStart === currentWeekStart && v.colour === 'GREEN') {
+      const parts: string[] = [];
+      if (Number.isFinite(c.kmMax)) {
+        const kmLeftMin = Math.max(0, c.kmMin - w.kmWeek);
+        const kmLeftMax = Math.max(0, c.kmMax - w.kmWeek);
+        parts.push(kmLeftMax > 0 ? `${kmLeftMin.toFixed(0)} to ${kmLeftMax.toFixed(0)} km left` : 'weekly target met');
+      }
+      if (Number.isFinite(c.lrMax)) {
+        parts.push(`long run up to ${c.lrMax.toFixed(0)} km`);
+      }
+      if (parts.length > 0) {
+        v = { ...v, reason: `${v.reason} ${parts.join(', ')}.` };
+      }
+    }
 
     // A race's structure only conflicts with a week the plan actually left
     // alone for the user (userEdited or Limited); suggestPlan() itself
@@ -155,6 +178,9 @@ export async function buildState(env: Env): Promise<StateResponse> {
     const effortKmWeek = agg ? agg.effortKmWeek : w.kmWeek + (planRow?.dplusM ?? 0) / 100;
     const mechKmWeek = agg ? agg.mechKmWeek : w.kmWeek + (settings.descentWeightW * (planRow?.dminusM ?? 0)) / 100;
     const runsWeek = agg ? agg.runsWeek : 0;
+
+    const raceId = planRow?.raceId ?? null;
+    const raceName = raceId != null ? (races.find((r) => r.id === raceId)?.name ?? null) : null;
 
     return {
       weekStart: w.weekStart,
@@ -176,6 +202,8 @@ export async function buildState(env: Env): Promise<StateResponse> {
       flags: flagList,
       verdict: v,
       raceConflictType,
+      raceId,
+      raceName,
     };
   });
 

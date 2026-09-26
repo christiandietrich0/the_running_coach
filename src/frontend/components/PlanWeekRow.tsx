@@ -16,6 +16,7 @@ export function PlanWeekRow({ week, onClick }: { week: WeekState; onClick: () =>
         <div class="plan-row-top">
           <span class={`pill${week.type === 'RACE' ? ' pill-race' : ''}`}>{WEEK_TYPE_LABEL[week.type]}</span>
           <span class="plan-row-date">{fmtWeekLabel(week.weekStart)}</span>
+          {week.type === 'RACE' && week.raceName && <span class="plan-row-race-name">{week.raceName}</span>}
           {week.userEdited && <span class="plan-row-edited">edited</span>}
         </div>
         <div class="plan-row-numbers">

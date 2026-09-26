@@ -6,10 +6,18 @@ max descent. See `docs/training_planner_mechanics_brief.md` for the rules
 and `docs/training_planner_technical_brief.md` for the architecture. The
 build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **v1 shipped.** Deployed, behind Cloudflare Access, live on
-Christian's iPhone home screen. Per the kickoff brief: live with it for
-a week before touching v2 (section 10: tissue EWMA, frequency flag,
-post-race auto-insertion).
+Status: **v1.1 (logic fixes) in progress.** v1 shipped, deployed behind
+Cloudflare Access, live on Christian's iPhone home screen. After a week of
+real use, a first round of logic bugs (A1-A7: the long-run cap formula,
+the LR30/D30 reference date, race-driven plan structure, fixed taper
+percentages, the in-progress week's verdict, feasibility) and a second
+round (hard long-run invariants applied to every week including edited
+ones, a dedicated post-race Recovery week type, "Reset to suggested",
+race-week shakeouts and race name display, a hard +30% week-on-week cap on
+suggestPlan's own output, and a fixed This Week verdict reason line) were
+found and fixed; see the git log for the exact commits. The UI visual pass
+(new screens/styling) is still pending. Migration `0002_plan_race_id.sql`
+needs `npm run db:migrate:remote` on next deploy.
 
 ## Architecture
 
@@ -106,9 +114,10 @@ separate refetch after a write.
 | `GET /api/state` | Weeks (history + up to 12 weeks planned/blank ahead) with metrics, refs, corridor, flags and verdict; races with targets and feasibility; current settings |
 | `POST /api/sync?mode=backfill\|incremental` | Manual refresh from intervals.icu |
 | `PUT /api/plan/:week` | Edit a planned week (`:week` a Monday date). Always sets `user_edited` |
+| `DELETE /api/plan/:week` | "Reset to suggested": clears `user_edited` for that week and re-runs auto-fill |
 | `POST /api/plan/suggest` | Run auto-fill (never touches edited/Limited weeks), persist the result |
-| `PUT /api/races/new` or `PUT /api/races/:id` | Create (`new`) or replace a race |
-| `DELETE /api/races/:id` | Remove a race |
+| `PUT /api/races/new` or `PUT /api/races/:id` | Create (`new`) or replace a race. Auto-reruns auto-fill so the race's structure lands immediately |
+| `DELETE /api/races/:id` | Remove a race. Also auto-reruns auto-fill |
 | `PUT /api/checkin/:week` | Save a symptom check-in for that week |
 | `PUT /api/activities/:id/override` | Set `isRace`/`exclude` for one activity; 404 on an unknown id |
 | `PUT /api/settings` | Patch one or more `defaults.ts` parameters; rejects unknown keys or a value with the wrong shape |

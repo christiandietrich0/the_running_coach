@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { putPlanWeek, suggestPlan } from '../api';
+import { putPlanWeek, resetPlanWeek, suggestPlan } from '../api';
 import { PlanWeekEditForm } from '../components/PlanWeekEditForm';
 import { PlanWeekRow } from '../components/PlanWeekRow';
 import type { PlanWeekPatch, StateResponse } from '../types';
@@ -7,6 +7,7 @@ import type { PlanWeekPatch, StateResponse } from '../types';
 export function Plan({ state, onStateChange }: { state: StateResponse; onStateChange: (s: StateResponse) => void }) {
   const [editingWeek, setEditingWeek] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,6 +24,20 @@ export function Plan({ state, onStateChange }: { state: StateResponse; onStateCh
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleReset(weekStart: string) {
+    setResetting(true);
+    setError(null);
+    try {
+      const next = await resetPlanWeek(weekStart);
+      onStateChange(next);
+      setEditingWeek(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -60,6 +75,8 @@ export function Plan({ state, onStateChange }: { state: StateResponse; onStateCh
                   saving={saving}
                   onSave={(patch) => handleSave(week.weekStart, patch)}
                   onCancel={() => setEditingWeek(null)}
+                  onReset={() => handleReset(week.weekStart)}
+                  resetting={resetting}
                 />
               </div>
             ) : (

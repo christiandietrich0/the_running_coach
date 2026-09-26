@@ -117,6 +117,7 @@ describe('buildDenseTimeline', () => {
         limitedDays: null,
         limitedKmCap: null,
         userEdited: false,
+        raceId: null,
       },
     ];
     const dense = buildDenseTimeline(actual, planned);
@@ -128,7 +129,7 @@ describe('buildDenseTimeline', () => {
 
   it('gives a planned RACE week no long-run point', () => {
     const planned: PlanWeek[] = [
-      { weekStart: '2026-07-27', type: 'RACE', km: 42, longRunKm: 42, dplusM: 1000, dminusM: 1000, limitedDays: null, limitedKmCap: null, userEdited: false },
+      { weekStart: '2026-07-27', type: 'RACE', km: 42, longRunKm: 42, dplusM: 1000, dminusM: 1000, limitedDays: null, limitedKmCap: null, userEdited: false, raceId: null },
     ];
     const dense = buildDenseTimeline(actual, planned);
     const raceWeek = dense.find((w) => w.weekStart === '2026-07-27')!;
@@ -141,7 +142,7 @@ describe('buildDenseTimeline', () => {
     // A plan row for that same week (e.g. from Suggest plan, run mid-week)
     // must not blow away what already happened.
     const planned: PlanWeek[] = [
-      { weekStart: '2026-07-06', type: 'DOWN', km: 74, longRunKm: 53, dplusM: 900, dminusM: 850, limitedDays: null, limitedKmCap: null, userEdited: false },
+      { weekStart: '2026-07-06', type: 'DOWN', km: 74, longRunKm: 53, dplusM: 900, dminusM: 850, limitedDays: null, limitedKmCap: null, userEdited: false, raceId: null },
     ];
     const dense = buildDenseTimeline(actual, planned);
     const week = dense.find((w) => w.weekStart === '2026-07-06')!;

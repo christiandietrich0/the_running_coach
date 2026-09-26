@@ -3,6 +3,8 @@
 import type { Corridor, References, Settings, WeekType } from './types';
 
 export interface CorridorOptions {
+  // This week's km ceiling: a user-set cap for Limited, or the derived
+  // 30%-of-peak-block figure for a post-race Recovery week.
   limitedKmCap?: number | null;
   // Distinguishes a routine cadence Down week from one the symptom lock
   // (5.3) forced, which gets a stricter weekly D- cap.
@@ -89,6 +91,21 @@ export function corridor(weekType: WeekType, refs: References, settings: Setting
         kmMin: 0,
         kmMax: options.limitedKmCap ?? Infinity,
         lrMax: capLongRun(Math.min(capRule, limitedHalfCap), settings, options),
+        dminusWeekMax,
+        dminusRunMax,
+      };
+    }
+
+    // Post-race recovery (v1.1 review A-round 2 item 2): a flat, absolute
+    // long-run cap, not an LR30-based rule -- right after a race, even a
+    // modest LR30 shouldn't licence a real long run this week. km still
+    // comes from the same "limitedKmCap" option Limited uses (here the
+    // caller's derived 30%-of-peak-block figure, not a user-set one).
+    case 'RECOVERY': {
+      return {
+        kmMin: 0,
+        kmMax: options.limitedKmCap ?? Infinity,
+        lrMax: capLongRun(settings.recoveryLongRunCapKm, settings, options),
         dminusWeekMax,
         dminusRunMax,
       };

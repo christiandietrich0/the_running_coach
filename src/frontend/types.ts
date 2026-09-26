@@ -4,7 +4,7 @@
 // section. Only the fields the frontend actually reads are typed in full;
 // `settings` is loosely typed since no screen edits it yet (Phase 8).
 
-export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED';
+export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED' | 'RECOVERY';
 export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED';
 export type FlagKind = 'SYMPTOMS' | 'LONG_RUN' | 'DESCENT_SINGLE' | 'DESCENT_WEEKLY' | 'RATIO' | 'LOW_VOLUME';
 
@@ -60,6 +60,8 @@ export interface WeekState {
   flags: Flag[];
   verdict: Verdict;
   raceConflictType: WeekType | null;
+  raceId: number | null;
+  raceName: string | null;
 }
 
 export interface TaperWeek {

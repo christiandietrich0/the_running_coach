@@ -139,6 +139,7 @@ describe('references: LR30 / D30', () => {
         limitedDays: null,
         limitedKmCap: null,
         userEdited: false,
+        raceId: null,
       },
     ];
     const dense = buildDenseTimeline([...aggMap.values()], planned);

@@ -28,8 +28,7 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     title: 'Long run',
     fields: [
-      { label: 'Long run cap (x LR30)', path: ['longRunCapFactor'], step: 0.05 },
-      { label: 'Long run red (x LR30)', path: ['longRunRedFactor'], step: 0.05 },
+      { label: 'Long run cap (x LR30) - also the hard invariant, over this is red', path: ['longRunCapFactor'], step: 0.05 },
       { label: 'LR30 window (days)', path: ['lr30WindowDays'], step: 1 },
       { label: 'Max long run (km)', path: ['maxLongRunKm'], step: 1 },
     ],
@@ -86,7 +85,10 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
       { label: 'A taper race week volume (fraction)', path: ['taperA', 'raceWeekPct'], step: 0.05 },
       { label: 'B taper length (weeks)', path: ['taperB', 'weeks'], step: 1 },
       { label: 'B taper volume (fraction)', path: ['taperB', 'pct'], step: 0.05 },
-      { label: 'Post-race recovery volume (fraction of peak)', path: ['postRaceLimitedPctOfPeak'], step: 0.05 },
+      { label: 'Post-race recovery volume (fraction of peak)', path: ['postRaceRecoveryPctOfPeak'], step: 0.05 },
+      { label: 'Post-race recovery long run cap (km)', path: ['recoveryLongRunCapKm'], step: 1 },
+      { label: 'Race week shakeouts (count)', path: ['raceWeekShakeouts', 'count'], step: 1 },
+      { label: 'Race week shakeout length (km each)', path: ['raceWeekShakeouts', 'kmEach'], step: 1 },
     ],
   },
   {

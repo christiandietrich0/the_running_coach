@@ -10,8 +10,9 @@ export interface Defaults {
   // on a Build/Hold week is the separate low-volume (blue) flag, not red.
   ratioZoneEdges: { lowVolume: number; greenMin: number; greenMax: number; red: number };
   detrainingCFactorOfM12: number;
-  longRunCapFactor: number; // green upper bound, x * LR30
-  longRunRedFactor: number; // red threshold, x * LR30
+  // Also the hard invariant threshold (v1.1 review A-round 2 item 1):
+  // over this, red, always -- no separate yellow tier any more.
+  longRunCapFactor: number;
   lr30WindowDays: number;
   runMergeGapMin: number;
   buildCorridor: { min: number; max: number }; // x * C
@@ -38,10 +39,17 @@ export interface Defaults {
   // Fixed single percentages, not ranges (mechanics brief 6.3; v1.1 review A4).
   taperA: { weeksUnder100km: number; weeksOver100km: number; week2Pct: number; week1Pct: number; raceWeekPct: number };
   taperB: { weeks: number; pct: number };
-  // Post-race recovery (v1.1 review A3, pulled forward from v2): the week
-  // right after a race is capped at this fraction of the pre-taper peak-
-  // block mean, then the week after that is a routine Down week.
-  postRaceLimitedPctOfPeak: number;
+  // Post-race Recovery (v1.1 review A3, pulled forward from v2; typed as
+  // its own week type per A-round 2 item 2): the week right after a race
+  // is capped at this fraction of the pre-taper peak-block mean, then the
+  // week after that is a routine Down week.
+  postRaceRecoveryPctOfPeak: number;
+  // Recovery's long run is a flat cap, not an LR30-based rule (A-round 2
+  // item 2).
+  recoveryLongRunCapKm: number;
+  // A race week's planned km includes shakeout runs on top of the race
+  // itself (A-round 2 item 4).
+  raceWeekShakeouts: { count: number; kmEach: number };
   maxWeekKm: number; // life cap
   maxLongRunKm: number;
   includeHikes: boolean;
@@ -52,7 +60,6 @@ export const DEFAULTS: Defaults = {
   ratioZoneEdges: { lowVolume: 0.8, greenMin: 0.8, greenMax: 1.2, red: 1.5 },
   detrainingCFactorOfM12: 0.7,
   longRunCapFactor: 1.1,
-  longRunRedFactor: 1.3,
   lr30WindowDays: 30,
   runMergeGapMin: 15,
   buildCorridor: { min: 1.05, max: 1.15 },
@@ -82,7 +89,9 @@ export const DEFAULTS: Defaults = {
     raceWeekPct: 0.4,
   },
   taperB: { weeks: 1, pct: 0.65 },
-  postRaceLimitedPctOfPeak: 0.3,
+  postRaceRecoveryPctOfPeak: 0.3,
+  recoveryLongRunCapKm: 15,
+  raceWeekShakeouts: { count: 2, kmEach: 5 },
   maxWeekKm: 80,
   maxLongRunKm: 55,
   includeHikes: false,

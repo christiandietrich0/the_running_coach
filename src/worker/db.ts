@@ -117,6 +117,7 @@ interface PlanWeekRow {
   limited_days: number | null;
   limited_km_cap: number | null;
   user_edited: number;
+  race_id: number | null;
 }
 
 function rowToPlanWeek(row: PlanWeekRow): PlanWeek {
@@ -130,6 +131,7 @@ function rowToPlanWeek(row: PlanWeekRow): PlanWeek {
     limitedDays: row.limited_days,
     limitedKmCap: row.limited_km_cap,
     userEdited: row.user_edited === 1,
+    raceId: row.race_id,
   };
 }
 
@@ -140,13 +142,13 @@ export async function loadPlanWeeks(env: Env): Promise<PlanWeek[]> {
 
 export async function upsertPlanWeek(env: Env, week: PlanWeek): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO plan_weeks (week_start, type, km, long_run_km, dplus_m, dminus_m, limited_days, limited_km_cap, user_edited)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO plan_weeks (week_start, type, km, long_run_km, dplus_m, dminus_m, limited_days, limited_km_cap, user_edited, race_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(week_start) DO UPDATE SET
        type = excluded.type, km = excluded.km, long_run_km = excluded.long_run_km,
        dplus_m = excluded.dplus_m, dminus_m = excluded.dminus_m,
        limited_days = excluded.limited_days, limited_km_cap = excluded.limited_km_cap,
-       user_edited = excluded.user_edited`,
+       user_edited = excluded.user_edited, race_id = excluded.race_id`,
   )
     .bind(
       week.weekStart,
@@ -158,6 +160,7 @@ export async function upsertPlanWeek(env: Env, week: PlanWeek): Promise<void> {
       week.limitedDays,
       week.limitedKmCap,
       week.userEdited ? 1 : 0,
+      week.raceId,
     )
     .run();
 }
@@ -166,13 +169,13 @@ export async function upsertPlanWeeks(env: Env, weeks: PlanWeek[]): Promise<void
   if (weeks.length === 0) return;
   const statements = weeks.map((week) =>
     env.DB.prepare(
-      `INSERT INTO plan_weeks (week_start, type, km, long_run_km, dplus_m, dminus_m, limited_days, limited_km_cap, user_edited)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO plan_weeks (week_start, type, km, long_run_km, dplus_m, dminus_m, limited_days, limited_km_cap, user_edited, race_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(week_start) DO UPDATE SET
          type = excluded.type, km = excluded.km, long_run_km = excluded.long_run_km,
          dplus_m = excluded.dplus_m, dminus_m = excluded.dminus_m,
          limited_days = excluded.limited_days, limited_km_cap = excluded.limited_km_cap,
-         user_edited = excluded.user_edited`,
+         user_edited = excluded.user_edited, race_id = excluded.race_id`,
     ).bind(
       week.weekStart,
       week.type,
@@ -183,9 +186,14 @@ export async function upsertPlanWeeks(env: Env, weeks: PlanWeek[]): Promise<void
       week.limitedDays,
       week.limitedKmCap,
       week.userEdited ? 1 : 0,
+      week.raceId,
     ),
   );
   await env.DB.batch(statements);
+}
+
+export async function deletePlanWeek(env: Env, weekStart: string): Promise<void> {
+  await env.DB.prepare('DELETE FROM plan_weeks WHERE week_start = ?').bind(weekStart).run();
 }
 
 interface RaceRow {

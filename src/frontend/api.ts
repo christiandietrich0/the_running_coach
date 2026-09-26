@@ -28,6 +28,11 @@ export async function suggestPlan(): Promise<StateResponse> {
   return readStateOrThrow(res, 'POST /api/plan/suggest');
 }
 
+export async function resetPlanWeek(weekStart: string): Promise<StateResponse> {
+  const res = await fetch(`/api/plan/${weekStart}`, { method: 'DELETE' });
+  return readStateOrThrow(res, 'DELETE /api/plan/:week');
+}
+
 export async function putRace(id: number | 'new', patch: RacePatch): Promise<StateResponse> {
   const res = await fetch(`/api/races/${id}`, {
     method: 'PUT',

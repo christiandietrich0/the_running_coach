@@ -13,11 +13,15 @@ export function PlanWeekEditForm({
   saving,
   onSave,
   onCancel,
+  onReset,
+  resetting,
 }: {
   week: WeekState;
   saving: boolean;
   onSave: (patch: PlanWeekPatch) => void;
   onCancel: () => void;
+  onReset: () => void;
+  resetting: boolean;
 }) {
   const initialDplusM = Math.round(Math.max(0, (week.effortKmWeek - week.kmWeek) * 100));
 
@@ -88,6 +92,14 @@ export function PlanWeekEditForm({
             <input type="number" inputMode="decimal" value={limitedKmCap} onInput={(e) => setLimitedKmCap(e.currentTarget.value)} />
           </label>
         </div>
+      )}
+
+      {week.userEdited && (
+        <p class="plan-hint">
+          <button type="button" class="btn-link" onClick={onReset} disabled={saving || resetting}>
+            {resetting ? 'Resetting...' : 'Reset to suggested'}
+          </button>
+        </p>
       )}
 
       <div class="field-actions">

@@ -4,12 +4,15 @@
 // This never touches weeks the user has edited or tagged Limited (7).
 // Races (any priority) drive the plan directly (v1.1 review A3): each one
 // contributes a peak week, its taper weeks, the race week itself, and two
-// recovery weeks after it (Limited then Down). Everything else is filled
+// recovery weeks after it (Recovery then Down). Everything else is filled
 // forward at the Build/Build/Build/Down cadence. Every generated week's
 // long run is clamped through corridor()'s lrMax, which already folds in
 // the full A1 cap formula (type cap rule, max_long_run_km, the driving
-// race's peak long run, and 0.55x the week's own km) -- so no generated
-// week can ever come out above what corridor() would flag red.
+// race's peak long run, and 0.55x the week's own km); every generated
+// week's km is additionally clamped to at most 1.30x the previous week's
+// own km (v1.1 review A-round 2 item 5), on top of the corridor -- so no
+// generated week can ever come out above what corridor() or the hard
+// week-on-week flag would flag red.
 import { addDays, addWeeks, mondayOf } from './dates';
 import { buildDenseTimeline } from './aggregate';
 import { corridor } from './corridor';
@@ -42,7 +45,7 @@ function recentSlopes(actualAggregates: WeeklyAggregate[], windowWeeks: number):
   return { dplusPerKm: dplusM / km, dminusPerKm: dminusM / km };
 }
 
-export type RaceSlotKind = 'PEAK' | 'TAPER' | 'RACE' | 'POST_LIMITED' | 'POST_DOWN';
+export type RaceSlotKind = 'PEAK' | 'TAPER' | 'RACE' | 'POST_RECOVERY' | 'POST_DOWN';
 
 export interface RaceSlot {
   weekStart: string;
@@ -63,8 +66,8 @@ export function raceSlotWeekType(kind: RaceSlotKind): WeekType | null {
       return 'RACE';
     case 'TAPER':
       return 'TAPER';
-    case 'POST_LIMITED':
-      return 'LIMITED';
+    case 'POST_RECOVERY':
+      return 'RECOVERY';
     case 'POST_DOWN':
       return 'DOWN';
     case 'PEAK':
@@ -74,11 +77,13 @@ export function raceSlotWeekType(kind: RaceSlotKind): WeekType | null {
 
 // Every week a race drives, keyed by weekStart: the peak week (the Build
 // week right before the taper starts, if there is one), the taper weeks,
-// the race week itself, and the two recovery weeks after it (Limited then
-// Down -- pulled forward from v2 per the review). Pure function of race
-// dates and settings only, so it doubles as the source of truth for
-// conflict detection. Races are processed oldest-first, so a later race's
-// slots win any collision with an earlier race's trailing recovery weeks.
+// the race week itself, and the two recovery weeks after it (Recovery then
+// Down -- pulled forward from v2 per the review; Recovery is its own week
+// type, not the user-declared Limited, per A-round 2 item 2). Pure
+// function of race dates and settings only, so it doubles as the source of
+// truth for conflict detection. Races are processed oldest-first, so a
+// later race's slots win any collision with an earlier race's trailing
+// recovery weeks.
 export function raceStructureSlots(races: Race[], settings: Settings): Map<string, RaceSlot> {
   const slots = new Map<string, RaceSlot>();
   const sorted = [...races].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -96,7 +101,7 @@ export function raceStructureSlots(races: Race[], settings: Settings): Map<strin
       slots.set(t.weekStart, { weekStart: t.weekStart, kind: 'TAPER', race, targets, volumePct: t.volumePct });
     }
     slots.set(raceWeekStart, { weekStart: raceWeekStart, kind: 'RACE', race, targets });
-    slots.set(addDays(raceWeekStart, 7), { weekStart: addDays(raceWeekStart, 7), kind: 'POST_LIMITED', race, targets });
+    slots.set(addDays(raceWeekStart, 7), { weekStart: addDays(raceWeekStart, 7), kind: 'POST_RECOVERY', race, targets });
     slots.set(addDays(raceWeekStart, 14), { weekStart: addDays(raceWeekStart, 14), kind: 'POST_DOWN', race, targets });
   }
 
@@ -124,6 +129,22 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
   const filled: PlanWeek[] = [];
   let buildStreak = 0;
 
+  // Seed from the actual week immediately before currentWeekStart, if
+  // there is one, so the very first generated week is also bounded by it
+  // (v1.1 review A-round 2 item 5).
+  const priorWeekAgg = actualAggregates.find((a) => a.weekStart === addDays(currentWeekStart, -7));
+  let prevKm: number | null = priorWeekAgg ? priorWeekAgg.kmWeek : null;
+
+  // Hard week-on-week growth cap, on top of the corridor: the same
+  // threshold the display-side flag (flags.ts) already uses, so a
+  // properly-generated plan can never trip it. Only ever tightens km
+  // (never raises it), so a deliberate decrease (Taper/Down/Recovery)
+  // simply isn't affected.
+  function capWeekOnWeek(km: number): number {
+    if (prevKm == null || prevKm <= 0) return km;
+    return Math.min(km, prevKm * (1 + settings.hardWeekOnWeekCapPct));
+  }
+
   // Real history + whatever's been filled so far, so C/LR30/DW4 roll
   // forward through the plan (3.2, 3.4).
   function refsAt(cursor: string) {
@@ -133,7 +154,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
 
   // The mean km of the peak block (the last up-to-4 weeks generated right
   // before a race's taper/race week), cached per race: the post-race
-  // Limited week needs the same figure its own taper did, not whatever's
+  // Recovery week needs the same figure its own taper did, not whatever's
   // most recently been filled by the time it's reached (which by then is
   // the race week and taper themselves).
   function peakMeanFor(race: Race): number {
@@ -150,30 +171,37 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
     if (isLocked(existing)) {
       if (existing!.type === 'LIMITED') buildStreak = 0;
       filled.push(existing!);
+      prevKm = existing!.km ?? prevKm;
       continue;
     }
 
     const slot = slots.get(cursor);
 
     if (slot?.kind === 'RACE') {
+      // Race week's km is the race itself plus shakeouts, not a suggestion
+      // -- exempt from the week-on-week cap (A-round 2 item 4).
+      const km = slot.race.km + settings.raceWeekShakeouts.count * settings.raceWeekShakeouts.kmEach;
       filled.push({
         weekStart: cursor,
         type: 'RACE',
-        km: slot.race.km,
+        km,
         longRunKm: slot.race.km,
         dplusM: slot.race.dplusM,
         dminusM: slot.race.dminusM,
         limitedDays: null,
         limitedKmCap: null,
         userEdited: false,
+        raceId: slot.race.id,
       });
       buildStreak = 0;
+      prevKm = km;
       continue;
     }
 
     if (slot?.kind === 'PEAK') {
       const dplusRatioFactor = 1 + dplusPerKm / 100;
-      const km = dplusRatioFactor > 0 ? slot.targets.peakWeekEffortKm / dplusRatioFactor : slot.targets.peakWeekEffortKm;
+      const rawKm = dplusRatioFactor > 0 ? slot.targets.peakWeekEffortKm / dplusRatioFactor : slot.targets.peakWeekEffortKm;
+      const km = capWeekOnWeek(rawKm);
       const refs = refsAt(cursor);
       const c = corridor('BUILD', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm });
       filled.push({
@@ -186,14 +214,16 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         limitedDays: null,
         limitedKmCap: null,
         userEdited: false,
+        raceId: null,
       });
       buildStreak += 1;
+      prevKm = km;
       continue;
     }
 
     if (slot?.kind === 'TAPER') {
       const peakMean = peakMeanFor(slot.race);
-      const km = (slot.volumePct ?? 0) * peakMean;
+      const km = capWeekOnWeek((slot.volumePct ?? 0) * peakMean);
       const refs = refsAt(cursor);
       const c = corridor('TAPER', refs, settings, { kmForLongRunCap: km, peakLongRunKm: slot.targets.peakLongRunKm });
       filled.push({
@@ -206,18 +236,20 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         limitedDays: null,
         limitedKmCap: null,
         userEdited: false,
+        raceId: null,
       });
+      prevKm = km;
       continue;
     }
 
-    if (slot?.kind === 'POST_LIMITED') {
+    if (slot?.kind === 'POST_RECOVERY') {
       const peakMean = peakMeanFor(slot.race);
-      const kmCap = settings.postRaceLimitedPctOfPeak * peakMean;
+      const kmCap = capWeekOnWeek(settings.postRaceRecoveryPctOfPeak * peakMean);
       const refs = refsAt(cursor);
-      const c = corridor('LIMITED', refs, settings, { limitedKmCap: kmCap, kmForLongRunCap: kmCap });
+      const c = corridor('RECOVERY', refs, settings, { limitedKmCap: kmCap, kmForLongRunCap: kmCap });
       filled.push({
         weekStart: cursor,
-        type: 'LIMITED',
+        type: 'RECOVERY',
         km: kmCap,
         longRunKm: c.lrMax,
         dplusM: dplusPerKm * kmCap,
@@ -225,8 +257,10 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
         limitedDays: null,
         limitedKmCap: kmCap,
         userEdited: false,
+        raceId: null,
       });
       buildStreak = 0;
+      prevKm = kmCap;
       continue;
     }
 
@@ -246,7 +280,8 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
 
     const refs = refsAt(cursor);
     const base = corridor(type, refs, settings);
-    const km = Number.isFinite(base.kmMax) ? (base.kmMin + base.kmMax) / 2 : refs.C || 0;
+    const rawKm = Number.isFinite(base.kmMax) ? (base.kmMin + base.kmMax) / 2 : refs.C || 0;
+    const km = capWeekOnWeek(rawKm);
     const nextTargets = nextRaceTargets(races, cursor, settings);
     const c = corridor(type, refs, settings, { kmForLongRunCap: km, peakLongRunKm: nextTargets?.peakLongRunKm });
     const projectedLongRun = refs.LR30 > 0 ? settings.longRunCapFactor * refs.LR30 : km * 0.4;
@@ -262,7 +297,9 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
       limitedDays: null,
       limitedKmCap: null,
       userEdited: false,
+      raceId: null,
     });
+    prevKm = km;
   }
 
   return filled.sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));

@@ -90,15 +90,15 @@ describe('symptom check-in (5.1, 5.3)', () => {
 });
 
 describe('long run flag', () => {
-  it('is green within the cap, yellow between 1.10x and 1.30x, red beyond', () => {
+  it('is green within the 1.10x growth cap, red at and beyond it (v1.1 A-round 2 item 1: no yellow tier any more)', () => {
     const green = flags(baseInput({ longestKm: 32, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
     expect(green.find((f) => f.kind === 'LONG_RUN')!.colour).toBe('GREEN');
 
-    const yellow = flags(baseInput({ longestKm: 36, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
-    expect(yellow.find((f) => f.kind === 'LONG_RUN')!.colour).toBe('YELLOW');
-
-    const red = flags(baseInput({ longestKm: 40, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
+    const red = flags(baseInput({ longestKm: 36, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
     expect(red.find((f) => f.kind === 'LONG_RUN')!.colour).toBe('RED');
+
+    const wayRed = flags(baseInput({ longestKm: 40, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
+    expect(wayRed.find((f) => f.kind === 'LONG_RUN')!.colour).toBe('RED');
   });
 
   it('matches the spec\'s example reason line', () => {
@@ -111,6 +111,31 @@ describe('long run flag', () => {
 
   it('is skipped entirely on a Race week', () => {
     const result = flags(baseInput({ weekType: 'RACE', longestKm: 85, refs: { ...NEUTRAL_REFS, LR30: 30 } }), DEFAULTS);
+    expect(result.find((f) => f.kind === 'LONG_RUN')).toBeUndefined();
+  });
+
+  // v1.1 review A-round 2 item 1: these three are the A1 cap invariants,
+  // applied as hard flags on every week including user-edited ones -- the
+  // reported bug was a stale/locked week (Oct 26: LR 70 km in a 56 km
+  // week) showing green because its own LR30 reference had also drifted
+  // up, so the plain ratio check alone missed it.
+  it('is red when the long run exceeds this week\'s own km, regardless of the LR30 ratio', () => {
+    // ratio to LR30 (70/65 = 1.08) would read green on its own.
+    const result = flags(baseInput({ kmWeek: 56, longestKm: 70, refs: { ...NEUTRAL_REFS, LR30: 65 } }), DEFAULTS);
+    const lr = result.find((f) => f.kind === 'LONG_RUN')!;
+    expect(lr.colour).toBe('RED');
+    expect(lr.reason).toContain('56.0 km');
+  });
+
+  it('is red when the long run exceeds the max_long_run_km life cap, regardless of the LR30 ratio', () => {
+    const result = flags(baseInput({ kmWeek: 90, longestKm: 60, refs: { ...NEUTRAL_REFS, LR30: 58 } }), DEFAULTS);
+    const lr = result.find((f) => f.kind === 'LONG_RUN')!;
+    expect(lr.colour).toBe('RED');
+    expect(lr.reason).toContain(`${DEFAULTS.maxLongRunKm} km life cap`);
+  });
+
+  it('has no flag when there is no LR30 baseline at all, even with a long run', () => {
+    const result = flags(baseInput({ kmWeek: 90, longestKm: 20, refs: { ...NEUTRAL_REFS, LR30: 0 } }), DEFAULTS);
     expect(result.find((f) => f.kind === 'LONG_RUN')).toBeUndefined();
   });
 });
@@ -175,13 +200,13 @@ describe('low-volume (blue) flag', () => {
 
   it('never appears for the in-progress current week, however far under the floor (v1.1 review A5)', () => {
     const refs = { ...NEUTRAL_REFS, C: 50, M12: 50 };
-    const midWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, prevWeekKm: null, refs, weekInProgress: true }), DEFAULTS);
+    const midWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, longestKm: 4, prevWeekKm: null, refs, weekInProgress: true }), DEFAULTS);
     expect(midWeek.some((f) => f.kind === 'LOW_VOLUME')).toBe(false);
     expect(verdict(midWeek).colour).toBe('GREEN');
 
     // Same numbers, but the week has actually finished: the floor is a
     // real signal again.
-    const completedWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, prevWeekKm: null, refs, weekInProgress: false }), DEFAULTS);
+    const completedWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, longestKm: 4, prevWeekKm: null, refs, weekInProgress: false }), DEFAULTS);
     expect(completedWeek.some((f) => f.kind === 'LOW_VOLUME')).toBe(true);
     expect(verdict(completedWeek).colour).toBe('BLUE');
   });
