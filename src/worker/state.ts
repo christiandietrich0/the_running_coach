@@ -27,6 +27,19 @@ import { getSettings } from './settings-store';
 
 const CHART_LOOKAHEAD_WEEKS = 12;
 
+// The peak long run of the nearest upcoming A or B race (never C -- a
+// "train through" race has no taper/peak concept), for the live "long run
+// up to" cap: min(1.10 x LR30, race peak LR) in the weeks before it (v1.1
+// review round 4 item 3). C races are excluded on purpose; every other
+// week-type-specific rule and the max_long_run_km life cap still apply on
+// top via corridor()'s own capLongRun().
+function nextABRacePeakLR(races: Race[], weekStart: string, settings: Defaults): number | undefined {
+  const upcoming = races
+    .filter((r) => (r.priority === 'A' || r.priority === 'B') && mondayOf(r.date) >= weekStart)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+  return upcoming ? raceTargets(upcoming, settings).peakLongRunKm : undefined;
+}
+
 export interface WeekStateDTO {
   weekStart: string;
   isActual: boolean;
@@ -137,6 +150,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
       limitedKmCap: planRow?.limitedKmCap ?? null,
       symptomLocked,
       reentry,
+      peakLongRunKm: nextABRacePeakLR(races, w.weekStart, settings),
     });
 
     const flagList = flags(
@@ -157,6 +171,16 @@ export async function buildState(env: Env): Promise<StateResponse> {
     );
     let v = verdict(flagList);
     prevKm = w.kmWeek;
+
+    const raceId = planRow?.raceId ?? null;
+    const raceName = raceId != null ? (races.find((r) => r.id === raceId)?.name ?? null) : null;
+
+    // A Race week gets a distinct, neutral verdict, not "on track" (v1.1
+    // review round 4 item 1): flags() already returned no flags for it, so
+    // verdict([]) alone would default to green, which is misleading here.
+    if (effectiveType === 'RACE') {
+      v = { colour: 'RACE', reason: raceName ? `Race day: ${raceName}.` : 'Race day.', flags: [] };
+    }
 
     // The generic "On track." reason just repeats the title above it on
     // This Week; for the current week, replace it with the remaining
@@ -205,9 +229,6 @@ export async function buildState(env: Env): Promise<StateResponse> {
     const effortKmWeek = agg ? agg.effortKmWeek : w.kmWeek + (planRow?.dplusM ?? 0) / 100;
     const mechKmWeek = agg ? agg.mechKmWeek : w.kmWeek + (settings.descentWeightW * (planRow?.dminusM ?? 0)) / 100;
     const runsWeek = agg ? agg.runsWeek : 0;
-
-    const raceId = planRow?.raceId ?? null;
-    const raceName = raceId != null ? (races.find((r) => r.id === raceId)?.name ?? null) : null;
 
     return {
       weekStart: w.weekStart,

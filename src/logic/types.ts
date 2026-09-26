@@ -7,7 +7,12 @@ export type Settings = Defaults;
 
 export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED' | 'RECOVERY';
 
-export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED';
+// RACE is a distinct, neutral colour verdict() never itself produces (its
+// input is always an empty flag list for a Race week) -- the caller
+// assigns it directly for a Race week, since a race isn't "on track" or
+// "overloaded" against training references at all (v1.1 review round 4
+// item 1).
+export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED' | 'RACE';
 
 export type FlagKind = 'SYMPTOMS' | 'LONG_RUN' | 'DESCENT_SINGLE' | 'DESCENT_WEEKLY' | 'RATIO' | 'LOW_VOLUME';
 

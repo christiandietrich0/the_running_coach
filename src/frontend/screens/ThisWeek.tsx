@@ -16,7 +16,7 @@ export function ThisWeek({ state, onOpenCheckin }: { state: StateResponse; onOpe
       <VerdictBadge colour={week.verdict.colour} reason={week.verdict.reason} />
 
       <div class="card">
-        <WeekNumbers week={week} />
+        <WeekNumbers week={week} settings={state.settings} />
       </div>
 
       <div class="card">

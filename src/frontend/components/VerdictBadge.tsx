@@ -5,6 +5,7 @@ const LABEL: Record<FlagColour, string> = {
   BLUE: 'Low volume',
   YELLOW: 'Caution',
   RED: 'Overloaded',
+  RACE: 'Race day',
 };
 
 export function VerdictBadge({ colour, reason }: { colour: FlagColour; reason: string }) {

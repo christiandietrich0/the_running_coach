@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { fmtKm, fmtM } from '../format';
-import type { WeekState } from '../types';
+import type { Settings, WeekState } from '../types';
 
 // The three numbers with progress bars from mechanics brief 8.1: weekly
 // km ("42 of 48 to 55"), long run ("max 33 km"), descent ("max 1,400 m
@@ -21,6 +21,26 @@ function Bar({ fraction }: { fraction: number }) {
   );
 }
 
+// Weekly km's own bar (v1.1 review round 4 item 2): the green range
+// (0.8-1.2x C) is the acceptable band, same as the This Week banner text;
+// the week-type corridor's own ceiling is just a marker on top of it, not
+// the bar's own 100%.
+function BandedBar({ doneKm, greenMin, greenMax, targetMax }: { doneKm: number; greenMin: number; greenMax: number; targetMax: number | null }) {
+  const scaleMax = Math.max(greenMax, targetMax ?? 0, doneKm, 1) * 1.05;
+  const pct = (v: number) => Math.max(0, Math.min(100, (v / scaleMax) * 100));
+  const bandLeft = pct(greenMin);
+  const bandRight = pct(greenMax);
+  const over = doneKm > greenMax;
+
+  return (
+    <div class="meter-track meter-track-banded">
+      <div class="meter-band" style={{ left: `${bandLeft}%`, width: `${Math.max(0, bandRight - bandLeft)}%` }} />
+      <div class={`meter-fill-banded${over ? ' meter-fill-over' : ''}`} style={{ width: `${pct(doneKm)}%` }} />
+      {targetMax != null && <div class="meter-marker" style={{ left: `${pct(targetMax)}%` }} />}
+    </div>
+  );
+}
+
 function Stat({ label, children }: { label: string; children: ComponentChildren }) {
   return (
     <div class="stat">
@@ -30,12 +50,16 @@ function Stat({ label, children }: { label: string; children: ComponentChildren 
   );
 }
 
-export function WeekNumbers({ week }: { week: WeekState }) {
-  const { kmWeek, longestKm, dminusWeek, longestLossM, corridor } = week;
+export function WeekNumbers({ week, settings }: { week: WeekState; settings: Settings }) {
+  const { kmWeek, longestKm, dminusWeek, longestLossM, corridor, refs } = week;
   const kmCapped = Number.isFinite(corridor.kmMax);
   const lrCapped = Number.isFinite(corridor.lrMax);
   const dwCapped = Number.isFinite(corridor.dminusWeekMax);
   const drCapped = Number.isFinite(corridor.dminusRunMax);
+
+  const hasGreenRange = refs.C > 0;
+  const greenMin = settings.ratioZoneEdges.greenMin * refs.C;
+  const greenMax = settings.ratioZoneEdges.greenMax * refs.C;
 
   return (
     <div class="week-numbers">
@@ -43,7 +67,11 @@ export function WeekNumbers({ week }: { week: WeekState }) {
         <div class="stat-value">
           {kmCapped ? `${fmtKm(kmWeek)} of ${fmtKm(corridor.kmMin)} to ${fmtKm(corridor.kmMax)}` : `${fmtKm(kmWeek)} km`}
         </div>
-        {kmCapped && <Bar fraction={kmWeek / corridor.kmMax} />}
+        {hasGreenRange ? (
+          <BandedBar doneKm={kmWeek} greenMin={greenMin} greenMax={greenMax} targetMax={kmCapped ? corridor.kmMax : null} />
+        ) : (
+          kmCapped && <Bar fraction={kmWeek / corridor.kmMax} />
+        )}
       </Stat>
 
       <Stat label="Long run">

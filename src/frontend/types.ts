@@ -5,7 +5,7 @@
 // `settings` is loosely typed since no screen edits it yet (Phase 8).
 
 export type WeekType = 'BUILD' | 'HOLD' | 'DOWN' | 'TAPER' | 'RACE' | 'LIMITED' | 'RECOVERY';
-export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED';
+export type FlagColour = 'GREEN' | 'BLUE' | 'YELLOW' | 'RED' | 'RACE';
 export type FlagKind = 'SYMPTOMS' | 'LONG_RUN' | 'DESCENT_SINGLE' | 'DESCENT_WEEKLY' | 'RATIO' | 'LOW_VOLUME';
 
 export interface Flag {

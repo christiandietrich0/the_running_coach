@@ -155,9 +155,12 @@ describe('descent flags', () => {
     expect(flags(baseInput({ dminusWeek: 1400, refs }), DEFAULTS).find((f) => f.kind === 'DESCENT_WEEKLY')!.colour).toBe('RED');
   });
 
-  it('still applies on a Race week (races routinely exceed training references)', () => {
+  // v1.1 review round 4 item 1: a Race week used to still get descent
+  // flags (races routinely exceed training references, which isn't a
+  // problem) -- now it gets no flags at all, full stop.
+  it('is empty entirely on a Race week, not just skipping ratio/long-run', () => {
     const result = flags(baseInput({ weekType: 'RACE', longestLossM: 4800, dminusWeek: 4800, refs: { ...NEUTRAL_REFS, D30: 500, DW4: 800 } }), DEFAULTS);
-    expect(result.find((f) => f.kind === 'DESCENT_SINGLE')!.colour).toBe('RED');
+    expect(result).toEqual([]);
   });
 });
 

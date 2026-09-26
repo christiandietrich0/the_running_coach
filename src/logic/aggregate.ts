@@ -108,8 +108,15 @@ export function weeklyAggregates(runs: Run[], settings: Settings): Map<string, W
 // row) become explicit zero weeks, so "the previous 4 weeks" always means
 // 4 calendar weeks rather than 4 weeks-that-happened-to-have-a-run.
 //
-// Race weeks (actual: any activity race-flagged; planned: type RACE) never
-// offer a long-run point, per 3.4's "race-tagged runs excluded" rule.
+// A race is excluded from the LR30/D30 *reference* pool (3.4's "race-
+// tagged runs excluded"), but that happens via actualRuns in
+// references.ts's longRunPoints(), which only ever reads an actual week's
+// long-run fields here for weekType == null anyway. So an actual race
+// week's own longRunKm/longRunLossM/longRunDate stay populated with the
+// race itself: the display (This Week/Plan/Chart) should show the race
+// distance as that week's long run, not null it out (v1.1 review round 4
+// item 1). A planned RACE week already sets these directly from the race
+// (plan.ts), independent of this file.
 // Planned weeks only carry a weekly D- total (plan_weeks.dminus_m), not a
 // per-run figure; since this athlete's descent load sits almost entirely
 // on the long run of a 3-run week, the planned long run's D- is
@@ -128,9 +135,9 @@ export function buildDenseTimeline(
       weekStart: a.weekStart,
       kmWeek: a.kmWeek,
       dminusWeek: a.dminusWeek,
-      longRunKm: a.hasRace || a.longestKm <= 0 ? null : a.longestKm,
-      longRunLossM: a.hasRace || a.longestKm <= 0 ? null : a.longestLossM,
-      longRunDate: a.hasRace ? null : a.longestDate,
+      longRunKm: a.longestKm <= 0 ? null : a.longestKm,
+      longRunLossM: a.longestKm <= 0 ? null : a.longestLossM,
+      longRunDate: a.longestKm <= 0 ? null : a.longestDate,
       isRaceWeek: a.hasRace,
       weekType: null,
     });
@@ -149,7 +156,11 @@ export function buildDenseTimeline(
     }
 
     const isRaceWeek = p.type === 'RACE';
-    const longRunKm = isRaceWeek ? null : p.longRunKm ?? null;
+    // A planned RACE week's own longRunKm is the race distance itself
+    // (plan.ts), not something to null back out here -- it's excluded from
+    // the LR30/D30 reference pool via isRaceWeek in longRunPoints(), not by
+    // being absent (v1.1 review round 4 item 1).
+    const longRunKm = p.longRunKm ?? null;
     byWeek.set(p.weekStart, {
       weekStart: p.weekStart,
       kmWeek: p.km ?? 0,

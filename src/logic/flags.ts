@@ -173,19 +173,22 @@ export interface FlagsInput {
 }
 
 // One flag per rule in 5.1, plus the hard week-on-week cap and the
-// low-volume/detraining blue flags. Ratio and long-run flags are skipped
-// entirely on Race weeks ("Ratio and LR flags off").
+// low-volume/detraining blue flags. A Race week gets none of them at all
+// (v1.1 review round 4 item 1): it isn't "on track" or "overloaded"
+// against training references, it's just a race. The caller assigns the
+// distinct neutral RACE colour directly, since verdict([]) alone can't
+// tell a race week apart from a genuinely flag-free training week.
 export function flags(input: FlagsInput, settings: Settings): Flag[] {
   const { weekType, refs } = input;
+  if (weekType === 'RACE') return [];
+
   const out: Flag[] = [];
 
   const symptoms = assessSymptoms(input.checkin, input.priorCheckinsAsc, settings);
   out.push({ kind: 'SYMPTOMS', colour: symptoms.colour, reason: symptoms.reason });
 
-  if (weekType !== 'RACE') {
-    const lr = longRunFlag(input.longestKm, input.kmWeek, refs.LR30, settings);
-    if (lr) out.push(lr);
-  }
+  const lr = longRunFlag(input.longestKm, input.kmWeek, refs.LR30, settings);
+  if (lr) out.push(lr);
 
   const ds = descentSingleFlag(input.longestLossM, refs.D30, settings);
   if (ds) out.push(ds);
@@ -193,26 +196,24 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
   const dw = descentWeeklyFlag(input.dminusWeek, refs.DW4, settings);
   if (dw) out.push(dw);
 
-  if (weekType !== 'RACE') {
-    const r = ratioFlag(input.kmWeek, refs.C, settings);
-    if (r) out.push(r);
+  const r = ratioFlag(input.kmWeek, refs.C, settings);
+  if (r) out.push(r);
 
-    // Hard cap: a week-on-week jump of more than 30% is at least yellow,
-    // regardless of week type or corridor (5.1). Not evaluated for
-    // Recovery/Limited: a percentage jump between two deliberately small
-    // numbers is noise, not a real overload signal (v1.1 review round 3
-    // item 5).
-    if (weekType !== 'RECOVERY' && weekType !== 'LIMITED' && input.prevWeekKm != null && input.prevWeekKm > 0) {
-      const wow = input.kmWeek / input.prevWeekKm;
-      if (wow > 1 + settings.hardWeekOnWeekCapPct) {
-        out.push({
-          kind: 'RATIO',
-          colour: 'YELLOW',
-          reason: `Week ${input.kmWeek.toFixed(0)} km is ${Math.round((wow - 1) * 100)}% up on last week's ${input.prevWeekKm.toFixed(0)} km (hard cap +30%).`,
-          value: wow,
-          ref: 1 + settings.hardWeekOnWeekCapPct,
-        });
-      }
+  // Hard cap: a week-on-week jump of more than 30% is at least yellow,
+  // regardless of week type or corridor (5.1). Not evaluated for
+  // Recovery/Limited: a percentage jump between two deliberately small
+  // numbers is noise, not a real overload signal (v1.1 review round 3
+  // item 5).
+  if (weekType !== 'RECOVERY' && weekType !== 'LIMITED' && input.prevWeekKm != null && input.prevWeekKm > 0) {
+    const wow = input.kmWeek / input.prevWeekKm;
+    if (wow > 1 + settings.hardWeekOnWeekCapPct) {
+      out.push({
+        kind: 'RATIO',
+        colour: 'YELLOW',
+        reason: `Week ${input.kmWeek.toFixed(0)} km is ${Math.round((wow - 1) * 100)}% up on last week's ${input.prevWeekKm.toFixed(0)} km (hard cap +30%).`,
+        value: wow,
+        ref: 1 + settings.hardWeekOnWeekCapPct,
+      });
     }
   }
 
@@ -247,7 +248,10 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
   return out;
 }
 
-const SEVERITY: Record<FlagColour, number> = { GREEN: 0, BLUE: 1, YELLOW: 2, RED: 3 };
+// RACE never actually appears on an individual Flag (flags() returns no
+// flags at all for a Race week) -- listed only so this stays exhaustive
+// over FlagColour.
+const SEVERITY: Record<FlagColour, number> = { GREEN: 0, BLUE: 1, YELLOW: 2, RED: 3, RACE: -1 };
 
 // symptoms > long run > descent > weekly ratio (5.2); low-volume is blue
 // only and never competes at yellow/red.

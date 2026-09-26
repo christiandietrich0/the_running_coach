@@ -98,11 +98,16 @@ describe('buildDenseTimeline', () => {
     expect(dense[1].isRaceWeek).toBe(false);
   });
 
-  it('nulls the long-run point for a race week', () => {
+  // v1.1 review round 4 item 1: an actual race week's long-run point used
+  // to be nulled out here, but that only ever suppressed the display --
+  // LR30/D30 already exclude a race via actualRuns' own isRace check, not
+  // via this field. The display should show the race distance.
+  it('keeps the race distance as the long-run point for an actual race week', () => {
     const dense = buildDenseTimeline(actual, []);
     const raceWeek = dense.find((w) => w.weekStart === '2026-07-20')!;
     expect(raceWeek.isRaceWeek).toBe(true);
-    expect(raceWeek.longRunKm).toBeNull();
+    expect(raceWeek.longRunKm).toBe(30);
+    expect(raceWeek.longRunLossM).toBe(600);
   });
 
   it('appends planned weeks after the actual ones, treating their long run as if done', () => {
@@ -127,14 +132,14 @@ describe('buildDenseTimeline', () => {
     expect(plannedPoint.longRunDate).toBe('2026-07-27');
   });
 
-  it('gives a planned RACE week no long-run point', () => {
+  it('keeps the race distance as the long-run point for a planned RACE week', () => {
     const planned: PlanWeek[] = [
       { weekStart: '2026-07-27', type: 'RACE', km: 42, longRunKm: 42, dplusM: 1000, dminusM: 1000, limitedDays: null, limitedKmCap: null, userEdited: false, raceId: null },
     ];
     const dense = buildDenseTimeline(actual, planned);
     const raceWeek = dense.find((w) => w.weekStart === '2026-07-27')!;
     expect(raceWeek.isRaceWeek).toBe(true);
-    expect(raceWeek.longRunKm).toBeNull();
+    expect(raceWeek.longRunKm).toBe(42);
   });
 
   it('keeps a week\'s real numbers when a plan row exists for it too (the in-progress current week), only recording the plan\'s type', () => {

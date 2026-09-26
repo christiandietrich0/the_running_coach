@@ -22,6 +22,7 @@
   --blue: #2a78d6;
   --blue-bg: rgba(42, 120, 214, 0.12);
   --violet: #4a3aa7;
+  --violet-bg: rgba(74, 58, 167, 0.1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,6 +48,7 @@
     --blue: #3987e5;
     --blue-bg: rgba(57, 135, 229, 0.08);
     --violet: #9085e9;
+    --violet-bg: rgba(144, 133, 233, 0.08);
   }
 }
 
@@ -170,6 +172,14 @@ body {
   background: var(--blue);
 }
 
+.verdict-race {
+  background: var(--violet-bg);
+  border-left-color: var(--violet);
+}
+.verdict-race .verdict-dot {
+  background: var(--violet);
+}
+
 /* Week numbers */
 
 .week-numbers {
@@ -208,6 +218,41 @@ body {
 
 .meter-fill-over {
   background: var(--red);
+}
+
+/* Weekly km's banded bar (v1.1 review round 4 item 2): the green range is
+   the acceptable band, the week-type corridor is a marker on top of it. */
+.meter-track-banded {
+  position: relative;
+}
+
+.meter-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--green-bg);
+}
+
+.meter-fill-banded {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 4px;
+  background: var(--green);
+}
+
+.meter-fill-banded.meter-fill-over {
+  background: var(--red);
+}
+
+.meter-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--fg);
+  opacity: 0.55;
 }
 
 /* Runs list */
@@ -563,6 +608,9 @@ body {
 }
 .dot-blue {
   background: var(--blue);
+}
+.dot-race {
+  background: var(--violet);
 }
 
 .pill-race {
