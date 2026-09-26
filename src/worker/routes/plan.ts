@@ -23,7 +23,12 @@ export async function handlePutPlanWeek(request: Request, env: Env, weekParam: s
   return Response.json(await buildState(env));
 }
 
-export async function handleSuggestPlan(_request: Request, env: Env): Promise<Response> {
+// Runs suggestPlan() against the current history/plan/races and persists
+// whatever it generated. Locked (user-edited or Limited) weeks come back
+// unchanged, so only the generated ones need writing. Shared by the manual
+// "Suggest plan" action and by race create/edit/delete, which must rerun
+// this the same way (v1.1 review A3: races drive the plan automatically).
+export async function regeneratePlan(env: Env): Promise<void> {
   const [rawActivities, planWeeks, races, settings] = await Promise.all([
     loadRawActivities(env),
     loadPlanWeeks(env),
@@ -37,12 +42,13 @@ export async function handleSuggestPlan(_request: Request, env: Env): Promise<Re
 
   const plan = suggestPlan({ currentWeekStart, existingPlan: planWeeks, races, actualAggregates, actualRuns: runs, settings });
 
-  // Locked weeks come back unchanged in suggestPlan's result; only persist
-  // the ones it actually generated.
   await upsertPlanWeeks(
     env,
     plan.filter((w) => !w.userEdited),
   );
+}
 
+export async function handleSuggestPlan(_request: Request, env: Env): Promise<Response> {
+  await regeneratePlan(env);
   return Response.json(await buildState(env));
 }

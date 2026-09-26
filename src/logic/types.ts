@@ -131,8 +131,7 @@ export interface Race {
 export interface TaperWeek {
   weekStart: string;
   label: string;
-  volumeMinPct: number;
-  volumeMaxPct: number;
+  volumePct: number;
 }
 
 export interface RaceTargets {

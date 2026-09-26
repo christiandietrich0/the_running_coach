@@ -87,11 +87,14 @@ function longRunPoints(dense: TimelinePoint[], actualRuns: Run[]): LongRunPoint[
   return points;
 }
 
-function maxInWindow(points: LongRunPoint[], weekStart: string, windowDays: number, pick: (p: LongRunPoint) => number): number {
-  const windowStart = addDays(weekStart, -windowDays);
+// `asOf` is the week's Sunday, not its Monday (see references() below):
+// conservative, so a long run that's about to age out of the 30-day
+// window by the time this week is actually run has already dropped out.
+function maxInWindow(points: LongRunPoint[], asOf: string, windowDays: number, pick: (p: LongRunPoint) => number): number {
+  const windowStart = addDays(asOf, -windowDays);
   let max = 0;
   for (const p of points) {
-    if (p.date >= windowStart && p.date < weekStart) {
+    if (p.date >= windowStart && p.date < asOf) {
       const v = pick(p);
       if (v > max) max = v;
     }
@@ -118,9 +121,15 @@ export function references(input: ReferencesInput, settings: Settings): Referenc
   const M12 = computeM12(denseTimeline, idx, 12);
   const buildMean = computeBuildMean(denseTimeline, idx, settings.downCadenceBuildWeeks);
 
+  // LR30/D30 are evaluated as of this week's Sunday, not its Monday: a
+  // long run must survive the whole week before it can be relied on to
+  // set a cap for it (v1.1 review A2). C/DW4/M12/buildMean stay
+  // Monday-referenced since those are whole-week sums, not day-level
+  // windows.
+  const asOf = addDays(weekStart, 6);
   const points = longRunPoints(denseTimeline, actualRuns);
-  const LR30 = maxInWindow(points, weekStart, settings.lr30WindowDays, (p) => p.km);
-  const D30 = maxInWindow(points, weekStart, settings.lr30WindowDays, (p) => p.lossM);
+  const LR30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.km);
+  const D30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.lossM);
 
   return { C, LR30, D30, DW4, M12, buildMean, weeksUsedForC: weeksUsed };
 }

@@ -96,6 +96,23 @@ describe('references: LR30 / D30', () => {
     expect(refs.D30).toBeCloseTo(500);
   });
 
+  it('is evaluated as of the week\'s Sunday, not its Monday (v1.1 review A2)', () => {
+    // Real example from the review: for the week of Sep 28 2026, the
+    // 48.1km run from Aug 29 must have already aged out (Sunday Oct 4
+    // minus 30 days = Sep 4, so Aug 29 is outside), leaving the Sep 12
+    // run (36km) as LR30. Evaluating from Monday Sep 28 instead (the
+    // pre-fix bug) would keep Aug 29 in-window (Sep 28 - 30 = Aug 29,
+    // the boundary itself) and wrongly return 48.1.
+    const runs = mergeRuns([
+      activity('aug29', '2026-08-29T08:00:00', 48100, 1200),
+      activity('sep12', '2026-09-12T08:00:00', 36000, 700),
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+    const refs = references({ weekStart: '2026-09-28', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refs.LR30).toBeCloseTo(36);
+  });
+
   it('excludes race-tagged runs, even if they are the longest', () => {
     const runs = mergeRuns([
       activity('race', '2026-07-05T08:00:00', 85000, 4800, true),

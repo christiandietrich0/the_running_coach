@@ -35,8 +35,13 @@ export interface Defaults {
   peakWeekFactor: number; // x * race_effort_km
   peakWeeklyDplusFactor: number; // x * race D+
   peakSingleRunDminusFactor: number; // x * race D-
-  taperA: { weeksUnder100km: number; weeksOver100km: number; week2Pct: number; week1MinPct: number; week1MaxPct: number; raceWeekMinPct: number; raceWeekMaxPct: number };
-  taperB: { weeks: number; minPct: number; maxPct: number };
+  // Fixed single percentages, not ranges (mechanics brief 6.3; v1.1 review A4).
+  taperA: { weeksUnder100km: number; weeksOver100km: number; week2Pct: number; week1Pct: number; raceWeekPct: number };
+  taperB: { weeks: number; pct: number };
+  // Post-race recovery (v1.1 review A3, pulled forward from v2): the week
+  // right after a race is capped at this fraction of the pre-taper peak-
+  // block mean, then the week after that is a routine Down week.
+  postRaceLimitedPctOfPeak: number;
   maxWeekKm: number; // life cap
   maxLongRunKm: number;
   includeHikes: boolean;
@@ -73,12 +78,11 @@ export const DEFAULTS: Defaults = {
     weeksUnder100km: 2,
     weeksOver100km: 3,
     week2Pct: 0.7,
-    week1MinPct: 0.5,
-    week1MaxPct: 0.6,
-    raceWeekMinPct: 0.35,
-    raceWeekMaxPct: 0.45,
+    week1Pct: 0.55,
+    raceWeekPct: 0.4,
   },
-  taperB: { weeks: 1, minPct: 0.6, maxPct: 0.7 },
+  taperB: { weeks: 1, pct: 0.65 },
+  postRaceLimitedPctOfPeak: 0.3,
   maxWeekKm: 80,
   maxLongRunKm: 55,
   includeHikes: false,

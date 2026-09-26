@@ -1,6 +1,7 @@
 import { deleteRace, upsertRace } from '../db';
 import { readJson } from '../http';
 import type { Env } from '../index';
+import { regeneratePlan } from './plan';
 import { buildState } from '../state';
 import { parseId, parseRacePatch } from '../validation';
 
@@ -21,6 +22,10 @@ export async function handlePutRace(request: Request, env: Env, idParam: string)
   }
 
   await upsertRace(env, id, patchResult.value);
+  // Races drive the plan directly (v1.1 review A3): rerun auto-fill so the
+  // new/edited race's Race/Taper/recovery weeks land immediately, not only
+  // the next time "Suggest plan" is tapped.
+  await regeneratePlan(env);
 
   return Response.json(await buildState(env));
 }
@@ -30,6 +35,7 @@ export async function handleDeleteRace(_request: Request, env: Env, idParam: str
   if (!idResult.ok) return Response.json({ error: idResult.error }, { status: 400 });
 
   await deleteRace(env, idResult.value);
+  await regeneratePlan(env);
 
   return Response.json(await buildState(env));
 }

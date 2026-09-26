@@ -6,10 +6,8 @@ function fmtDate(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-function fmtPct(min: number, max: number): string {
-  const a = Math.round(min * 100);
-  const b = Math.round(max * 100);
-  return a === b ? `${a}%` : `${a} to ${b}%`;
+function fmtPct(pct: number): string {
+  return `${Math.round(pct * 100)}%`;
 }
 
 export function RaceCard({
@@ -77,7 +75,7 @@ export function RaceCard({
           {targets.taper.map((t) => (
             <div class="race-target-row" key={t.weekStart}>
               <span class="muted">{t.label}</span>
-              <span>{fmtPct(t.volumeMinPct, t.volumeMaxPct)} of peak</span>
+              <span>{fmtPct(t.volumePct)} of peak</span>
             </div>
           ))}
         </div>

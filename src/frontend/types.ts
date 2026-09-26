@@ -59,13 +59,13 @@ export interface WeekState {
   corridor: Corridor;
   flags: Flag[];
   verdict: Verdict;
+  raceConflictType: WeekType | null;
 }
 
 export interface TaperWeek {
   weekStart: string;
   label: string;
-  volumeMinPct: number;
-  volumeMaxPct: number;
+  volumePct: number;
 }
 
 export interface RaceTargets {

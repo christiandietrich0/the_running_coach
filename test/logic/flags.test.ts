@@ -172,6 +172,29 @@ describe('low-volume (blue) flag', () => {
     const result = flags(baseInput({ kmWeek: 30, prevWeekKm: 30, refs }), DEFAULTS);
     expect(result.some((f) => f.kind === 'LOW_VOLUME' && f.reason.includes('12-week'))).toBe(true);
   });
+
+  it('never appears for the in-progress current week, however far under the floor (v1.1 review A5)', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50, M12: 50 };
+    const midWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, prevWeekKm: null, refs, weekInProgress: true }), DEFAULTS);
+    expect(midWeek.some((f) => f.kind === 'LOW_VOLUME')).toBe(false);
+    expect(verdict(midWeek).colour).toBe('GREEN');
+
+    // Same numbers, but the week has actually finished: the floor is a
+    // real signal again.
+    const completedWeek = flags(baseInput({ weekType: 'BUILD', kmWeek: 10, prevWeekKm: null, refs, weekInProgress: false }), DEFAULTS);
+    expect(completedWeek.some((f) => f.kind === 'LOW_VOLUME')).toBe(true);
+    expect(verdict(completedWeek).colour).toBe('BLUE');
+  });
+
+  it('still flags real upside overages mid-week: long run and ratio ceiling are not affected by weekInProgress', () => {
+    const refs = { ...NEUTRAL_REFS, C: 50, LR30: 20, M12: 50 };
+    const midWeek = flags(
+      baseInput({ weekType: 'BUILD', kmWeek: 70, longestKm: 30, prevWeekKm: null, refs, weekInProgress: true }),
+      DEFAULTS,
+    );
+    expect(midWeek.some((f) => f.kind === 'LONG_RUN' && f.colour !== 'GREEN')).toBe(true);
+    expect(midWeek.some((f) => f.kind === 'RATIO' && f.colour !== 'GREEN')).toBe(true);
+  });
 });
 
 describe('verdict', () => {

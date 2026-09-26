@@ -1,7 +1,21 @@
 // Assembles the single GET /api/state payload every screen reads from
 // (technical brief section 7), and is reused by POST /api/plan/suggest to
 // return the state after auto-filling the plan.
-import { applySymptomLock, buildDenseTimeline, corridor, feasibility, flags, mergeRuns, mondayOf, raceTargets, references, verdict, weeklyAggregates } from '../logic';
+import {
+  applySymptomLock,
+  buildDenseTimeline,
+  corridor,
+  feasibility,
+  flags,
+  mergeRuns,
+  mondayOf,
+  raceStructureSlots,
+  raceSlotWeekType,
+  raceTargets,
+  references,
+  verdict,
+  weeklyAggregates,
+} from '../logic';
 import { addWeeks, diffDays } from '../logic/dates';
 import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, Verdict, WeekType } from '../logic/types';
 import { loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
@@ -30,6 +44,11 @@ export interface WeekStateDTO {
   corridor: Corridor;
   flags: Flag[];
   verdict: Verdict;
+  // Set when this week is user-edited but a race's auto-structure (v1.1
+  // review A3) wants a different type here -- e.g. the user changed a week
+  // a newly-added race now needs as its taper. suggestPlan() never
+  // overwrites a user-edited week itself, so this is surfaced instead.
+  raceConflictType: WeekType | null;
 }
 
 export interface RaceStateDTO extends Race {
@@ -80,6 +99,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const dense = buildDenseTimeline(actualAggregates, planWeeks, currentWeekStart, addWeeks(currentWeekStart, CHART_LOOKAHEAD_WEEKS));
 
   const checkinsAsc = [...checkins].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
+  const raceSlots = raceStructureSlots(races, settings);
 
   let prevKm: number | null = null;
   const weeks: WeekStateDTO[] = dense.map((w) => {
@@ -117,11 +137,19 @@ export async function buildState(env: Env): Promise<StateResponse> {
         checkin: weekCheckin,
         priorCheckinsAsc,
         prevWeekKm: prevKm,
+        weekInProgress: w.weekStart === currentWeekStart,
       },
       settings,
     );
     const v = verdict(flagList);
     prevKm = w.kmWeek;
+
+    // A race's structure only conflicts with a week the plan actually left
+    // alone for the user (userEdited or Limited); suggestPlan() itself
+    // always applies race structure to everything else.
+    const wantedType = raceSlots.get(w.weekStart) ? raceSlotWeekType(raceSlots.get(w.weekStart)!.kind) : null;
+    const isUserLocked = !!planRow && (planRow.userEdited || planRow.type === 'LIMITED');
+    const raceConflictType = isUserLocked && wantedType != null && wantedType !== planRow!.type ? wantedType : null;
 
     const agg = aggByWeek.get(w.weekStart);
     const effortKmWeek = agg ? agg.effortKmWeek : w.kmWeek + (planRow?.dplusM ?? 0) / 100;
@@ -147,6 +175,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
       corridor: c,
       flags: flagList,
       verdict: v,
+      raceConflictType,
     };
   });
 

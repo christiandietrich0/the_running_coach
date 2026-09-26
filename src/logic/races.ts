@@ -24,24 +24,14 @@ export function raceTargets(race: Race, settings: Settings): RaceTargets {
   if (race.priority === 'A') {
     const weeksOut = effortKm > 100 ? settings.taperA.weeksOver100km : settings.taperA.weeksUnder100km;
     if (weeksOut > 2) {
-      taper.push({
-        weekStart: addWeeks(raceWeekStart, -2),
-        label: 'week -2',
-        volumeMinPct: settings.taperA.week2Pct,
-        volumeMaxPct: settings.taperA.week2Pct,
-      });
+      taper.push({ weekStart: addWeeks(raceWeekStart, -2), label: 'week -2', volumePct: settings.taperA.week2Pct });
     }
-    taper.push({
-      weekStart: addWeeks(raceWeekStart, -1),
-      label: 'week -1',
-      volumeMinPct: settings.taperA.week1MinPct,
-      volumeMaxPct: settings.taperA.week1MaxPct,
-    });
-    taper.push({ weekStart: raceWeekStart, label: 'race week', volumeMinPct: settings.taperA.raceWeekMinPct, volumeMaxPct: settings.taperA.raceWeekMaxPct });
+    taper.push({ weekStart: addWeeks(raceWeekStart, -1), label: 'week -1', volumePct: settings.taperA.week1Pct });
+    taper.push({ weekStart: raceWeekStart, label: 'race week', volumePct: settings.taperA.raceWeekPct });
   } else if (race.priority === 'B') {
     const weekStart = addWeeks(raceWeekStart, -settings.taperB.weeks);
-    taper.push({ weekStart, label: 'week -1', volumeMinPct: settings.taperB.minPct, volumeMaxPct: settings.taperB.maxPct });
-    taper.push({ weekStart: raceWeekStart, label: 'race week', volumeMinPct: settings.taperB.minPct, volumeMaxPct: settings.taperB.maxPct });
+    taper.push({ weekStart, label: 'week -1', volumePct: settings.taperB.pct });
+    taper.push({ weekStart: raceWeekStart, label: 'race week', volumePct: settings.taperB.pct });
   }
   // Priority C: train through, no taper weeks (6.3).
 

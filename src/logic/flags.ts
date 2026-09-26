@@ -138,6 +138,13 @@ export interface FlagsInput {
   checkin: CheckIn | null;
   priorCheckinsAsc: CheckIn[];
   prevWeekKm: number | null;
+  // True for the current, still-in-progress week: kmWeek so far is a
+  // partial total, not the week's final volume, so the low-volume floor
+  // (which compares kmWeek/C against a ratio floor) would false-positive
+  // all week until the week is nearly over. Skipped for this week only;
+  // every other flag here is a genuine "so far" upside signal (long run,
+  // descent, ratio ceiling) that stays valid mid-week (v1.1 review A5).
+  weekInProgress?: boolean;
 }
 
 // One flag per rule in 5.1, plus the hard week-on-week cap and the
@@ -181,8 +188,9 @@ export function flags(input: FlagsInput, settings: Settings): Flag[] {
     }
   }
 
-  // Low volume (blue): R < 0.8 on a Build or Hold week only (5.1).
-  if ((weekType === 'BUILD' || weekType === 'HOLD') && refs.C > 0) {
+  // Low volume (blue): R < 0.8 on a Build or Hold week only (5.1). Not
+  // evaluated for the current in-progress week -- see weekInProgress above.
+  if (!input.weekInProgress && (weekType === 'BUILD' || weekType === 'HOLD') && refs.C > 0) {
     const R = input.kmWeek / refs.C;
     if (R < settings.ratioZoneEdges.lowVolume) {
       out.push({

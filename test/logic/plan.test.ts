@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addWeeks } from '../../src/logic/dates';
-import { suggestPlan } from '../../src/logic/plan';
+import { raceSlotWeekType, raceStructureSlots, suggestPlan } from '../../src/logic/plan';
 import { DEFAULTS } from '../../src/worker/defaults';
 import type { PlanWeek, Race, WeeklyAggregate } from '../../src/logic/types';
 
@@ -143,5 +143,169 @@ describe('suggestPlan', () => {
       horizonWeeks: 6,
     });
     expect(plan.find((w) => w.weekStart === limited.weekStart)).toEqual(limited);
+  });
+
+  // v1.1 review A3: races drive the plan directly -- race week, its taper
+  // weeks, and (pulled forward from v2) the two recovery weeks right after
+  // it, Limited then Down.
+  describe('race-driven structure (A3)', () => {
+    it('inserts the race week, taper weeks, and a post-race Limited then Down week', () => {
+      const race: Race = {
+        id: 1,
+        name: 'Test 100k',
+        date: addWeeks(CURRENT, 8),
+        km: 60,
+        dplusM: 3000,
+        dminusM: 3000,
+        targetTimeMin: null,
+        priority: 'A',
+      };
+      const plan = suggestPlan({
+        currentWeekStart: CURRENT,
+        existingPlan: [],
+        races: [race],
+        actualAggregates: steadyHistory(8),
+        actualRuns: [],
+        settings: DEFAULTS,
+        horizonWeeks: 12,
+      });
+      const byWeek = new Map(plan.map((w) => [w.weekStart, w]));
+
+      const raceWeek = byWeek.get(race.date)!;
+      expect(raceWeek.type).toBe('RACE');
+      expect(raceWeek.km).toBeCloseTo(race.km);
+      expect(raceWeek.longRunKm).toBeCloseTo(race.km);
+      expect(raceWeek.dplusM).toBeCloseTo(race.dplusM);
+      expect(raceWeek.dminusM).toBeCloseTo(race.dminusM);
+
+      const taperWeek = byWeek.get(addWeeks(race.date, -1))!;
+      expect(taperWeek.type).toBe('TAPER');
+
+      const weekAfter1 = byWeek.get(addWeeks(race.date, 1))!;
+      const weekAfter2 = byWeek.get(addWeeks(race.date, 2))!;
+      expect(weekAfter1.type).toBe('LIMITED');
+      expect(weekAfter2.type).toBe('DOWN');
+      expect(weekAfter1.limitedKmCap).toBeGreaterThan(0);
+      expect(weekAfter1.km).toBeCloseTo(weekAfter1.limitedKmCap!);
+    });
+
+    it('raceStructureSlots/raceSlotWeekType expose the same structure for conflict detection', () => {
+      const race: Race = { id: 5, name: 'B race', date: addWeeks(CURRENT, 6), km: 50, dplusM: 1000, dminusM: 1000, targetTimeMin: null, priority: 'B' };
+      const slots = raceStructureSlots([race], DEFAULTS);
+
+      expect(raceSlotWeekType(slots.get(addWeeks(race.date, -1))!.kind)).toBe('TAPER');
+      expect(raceSlotWeekType(slots.get(race.date)!.kind)).toBe('RACE');
+      expect(raceSlotWeekType(slots.get(addWeeks(race.date, 1))!.kind)).toBe('LIMITED');
+      expect(raceSlotWeekType(slots.get(addWeeks(race.date, 2))!.kind)).toBe('DOWN');
+    });
+
+    it('a user-edited week the race now wants differently is left alone (a conflict), not silently overwritten', () => {
+      const race: Race = { id: 6, name: 'Late-added B race', date: addWeeks(CURRENT, 3), km: 40, dplusM: 500, dminusM: 500, targetTimeMin: null, priority: 'B' };
+      const lockedWeek: PlanWeek = {
+        weekStart: addWeeks(race.date, -1), // the race's own taper now wants this week
+        type: 'HOLD',
+        km: 45,
+        longRunKm: 20,
+        dplusM: 200,
+        dminusM: 200,
+        limitedDays: null,
+        limitedKmCap: null,
+        userEdited: true,
+      };
+      const plan = suggestPlan({
+        currentWeekStart: CURRENT,
+        existingPlan: [lockedWeek],
+        races: [race],
+        actualAggregates: steadyHistory(8),
+        actualRuns: [],
+        settings: DEFAULTS,
+        horizonWeeks: 8,
+      });
+      // suggestPlan never overwrites a user-edited week...
+      expect(plan.find((w) => w.weekStart === lockedWeek.weekStart)).toEqual(lockedWeek);
+
+      // ...but the mismatch is still detectable so the UI can show a
+      // "Conflicts with race" chip instead of silence.
+      const slots = raceStructureSlots([race], DEFAULTS);
+      const wanted = raceSlotWeekType(slots.get(lockedWeek.weekStart)!.kind);
+      expect(wanted).toBe('TAPER');
+      expect(wanted).not.toBe(lockedWeek.type);
+    });
+  });
+
+  // v1.1 review A4: fixed single percentages, not a min-max range -- the
+  // Races card was showing "60 to 70%" for both week -1 and race week
+  // because both taper entries shared the same min/max settings fields.
+  it('taper weeks use fixed single percentages of the peak block mean, not a range (A4)', () => {
+    const race: Race = {
+      id: 2,
+      name: 'Big A race',
+      date: addWeeks(CURRENT, 10),
+      km: 120,
+      dplusM: 6000,
+      dminusM: 6000,
+      targetTimeMin: null,
+      priority: 'A',
+    };
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [race],
+      actualAggregates: steadyHistory(8),
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 14,
+    });
+    const byWeek = new Map(plan.map((w) => [w.weekStart, w]));
+
+    const week2 = byWeek.get(addWeeks(race.date, -2))!; // 180km effort > 100km -> 3-week taper
+    const week1 = byWeek.get(addWeeks(race.date, -1))!;
+    expect(week2.type).toBe('TAPER');
+    expect(week1.type).toBe('TAPER');
+
+    // The peak block: the 4 weeks generated right before the taper starts.
+    const peakBlockWeeks = plan.filter((w) => w.weekStart >= addWeeks(week2.weekStart, -4) && w.weekStart < week2.weekStart);
+    expect(peakBlockWeeks).toHaveLength(4);
+    const peakMean = peakBlockWeeks.reduce((s, w) => s + (w.km ?? 0), 0) / peakBlockWeeks.length;
+
+    expect(week2.km).toBeCloseTo(DEFAULTS.taperA.week2Pct * peakMean, 5);
+    expect(week1.km).toBeCloseTo(DEFAULTS.taperA.week1Pct * peakMean, 5);
+    // Two distinct fixed percentages (70% / 55%), not the same range shown
+    // for both weeks.
+    expect(week2.km).toBeGreaterThan(week1.km);
+  });
+
+  // v1.1 review A1: min(1.10 x LR30, peak LR of next race, max_long_run_km,
+  // 0.55 x planned week km), with the Race-week exception ("LR = the race
+  // itself" -- explicitly not run through this cap).
+  it('invariant: no generated week\'s long run exceeds its own planned km or max_long_run_km', () => {
+    const race: Race = {
+      id: 9,
+      name: 'Invariant race',
+      date: addWeeks(CURRENT, 9),
+      km: 100,
+      dplusM: 4000,
+      dminusM: 4000,
+      targetTimeMin: null,
+      priority: 'A',
+    };
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [race],
+      actualAggregates: steadyHistory(12, 60),
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 16,
+    });
+
+    expect(plan.length).toBeGreaterThan(10);
+    for (const w of plan) {
+      if (w.longRunKm == null || w.type === 'RACE') continue; // Race: LR = the race itself, exempt by design
+      expect(w.longRunKm).toBeLessThanOrEqual(DEFAULTS.maxLongRunKm + 1e-6);
+      if (w.km != null) {
+        expect(w.longRunKm).toBeLessThanOrEqual(w.km + 1e-6);
+      }
+    }
   });
 });
