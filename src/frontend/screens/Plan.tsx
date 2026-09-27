@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import { previewPlan, putPlanWeek, resetPlanWeek, suggestPlan } from '../api';
+import { BottomSheet } from '../components/BottomSheet';
 import { PlanWeekEditForm } from '../components/PlanWeekEditForm';
 import { PlanWeekRow } from '../components/PlanWeekRow';
 import type { PlanWeekPatch, StateResponse, WeekState } from '../types';
@@ -130,30 +131,17 @@ export function Plan({ state, onStateChange }: { state: StateResponse; onStateCh
 
         <div class="plan-list">
           {groups.map((group) => {
-            const rows = group.map((week) =>
-              editingWeek === week.weekStart ? (
-                <div class="plan-row-editing" key={week.weekStart}>
-                  <PlanWeekEditForm
-                    week={week}
-                    saving={saving}
-                    onSave={(patch) => handleSave(week.weekStart, patch)}
-                    onCancel={() => setEditingWeek(null)}
-                    onReset={() => handleReset(week.weekStart)}
-                    resetting={resetting}
-                  />
-                </div>
-              ) : (
-                <PlanWeekRow
-                  key={week.weekStart}
-                  week={week}
-                  isCurrent={week.weekStart === state.currentWeekStart}
-                  races={state.races}
-                  peakRace={week.peakForRaceId != null ? (state.races.find((r) => r.id === week.peakForRaceId) ?? null) : null}
-                  maxWeekKm={state.settings.maxWeekKm as number}
-                  onClick={() => setEditingWeek(week.weekStart)}
-                />
-              ),
-            );
+            const rows = group.map((week) => (
+              <PlanWeekRow
+                key={week.weekStart}
+                week={week}
+                isCurrent={week.weekStart === state.currentWeekStart}
+                races={state.races}
+                peakRace={week.peakForRaceId != null ? (state.races.find((r) => r.id === week.peakForRaceId) ?? null) : null}
+                maxWeekKm={state.settings.maxWeekKm as number}
+                onClick={() => setEditingWeek(week.weekStart)}
+              />
+            ));
             const isRaceGroup = group.length > 1 && groupKey(group[0]) != null;
             return isRaceGroup ? (
               <div class="plan-group" key={group[0].weekStart}>
@@ -165,6 +153,24 @@ export function Plan({ state, onStateChange }: { state: StateResponse; onStateCh
           })}
         </div>
       </div>
+
+      {editingWeek != null &&
+        (() => {
+          const week = upcoming.find((w) => w.weekStart === editingWeek);
+          if (!week) return null;
+          return (
+            <BottomSheet title={`Edit week · ${new Date(`${editingWeek}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`} onClose={() => setEditingWeek(null)}>
+              <PlanWeekEditForm
+                week={week}
+                saving={saving}
+                onSave={(patch) => handleSave(week.weekStart, patch)}
+                onCancel={() => setEditingWeek(null)}
+                onReset={() => handleReset(week.weekStart)}
+                resetting={resetting}
+              />
+            </BottomSheet>
+          );
+        })()}
     </div>
   );
 }

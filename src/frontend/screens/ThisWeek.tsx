@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { CheckinPrompt } from '../components/CheckinPrompt';
 import { NextRaceCard } from '../components/NextRaceCard';
 import { PlanUpdatedNote } from '../components/PlanUpdatedNote';
+import { PullToRefresh } from '../components/PullToRefresh';
 import { RunsList } from '../components/RunsList';
 import { VerdictBadge } from '../components/VerdictBadge';
 import { WeekHeadline } from '../components/WeekHeadline';
@@ -10,7 +11,15 @@ import { weekChipLabel } from '../labels';
 import { getLastSeenPlanUpdate, setLastSeenPlanUpdate } from '../storage';
 import type { StateResponse } from '../types';
 
-export function ThisWeek({ state, onOpenCheckin }: { state: StateResponse; onOpenCheckin: () => void }) {
+export function ThisWeek({
+  state,
+  onOpenCheckin,
+  onRefresh,
+}: {
+  state: StateResponse;
+  onOpenCheckin: () => void;
+  onRefresh: () => Promise<void>;
+}) {
   const week = state.weeks.find((w) => w.weekStart === state.currentWeekStart);
 
   // The note is one-time per lastPlanUpdateAt value (v1.1 review round 5
@@ -33,29 +42,31 @@ export function ThisWeek({ state, onOpenCheckin }: { state: StateResponse; onOpe
   const chip = weekChipLabel(week, state.races);
 
   return (
-    <div class="screen">
-      <div class="week-chip-row">
-        <span class={`week-chip${chip.isRace ? ' week-chip-race' : ''}`}>{chip.text}</span>
+    <PullToRefresh onRefresh={onRefresh}>
+      <div class="screen">
+        <div class="week-chip-row">
+          <span class={`week-chip${chip.isRace ? ' week-chip-race' : ''}`}>{chip.text}</span>
+        </div>
+
+        <VerdictBadge colour={week.verdict.colour} reason={week.verdict.reason} />
+
+        {showPlanUpdated && <PlanUpdatedNote onDismiss={handleDismissPlanUpdated} />}
+
+        <WeekHeadline week={week} />
+
+        <div class="card">
+          <WeekNumbers week={week} settings={state.settings} />
+        </div>
+
+        <div class="card">
+          <div class="card-title">This week's runs</div>
+          <RunsList runs={state.currentWeekRuns} />
+        </div>
+
+        <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
+
+        <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
       </div>
-
-      <VerdictBadge colour={week.verdict.colour} reason={week.verdict.reason} />
-
-      {showPlanUpdated && <PlanUpdatedNote onDismiss={handleDismissPlanUpdated} />}
-
-      <WeekHeadline week={week} />
-
-      <div class="card">
-        <WeekNumbers week={week} settings={state.settings} />
-      </div>
-
-      <div class="card">
-        <div class="card-title">This week's runs</div>
-        <RunsList runs={state.currentWeekRuns} />
-      </div>
-
-      <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
-
-      <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
-    </div>
+    </PullToRefresh>
   );
 }

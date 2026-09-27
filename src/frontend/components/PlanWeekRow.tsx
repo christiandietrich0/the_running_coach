@@ -13,16 +13,24 @@ function fmtWeekLabel(weekStart: string): string {
 // so those fall back to the account's own max-week life cap as the scale
 // instead of the week's own km -- otherwise every such bar would render
 // at a meaningless, constant ~95% full regardless of actual volume.
+//
+// The fill is a constant neutral colour, never status-coloured (v1.1
+// mobile polish): corridor.kmMax is a narrower "target" ceiling
+// (buildCorridor.max = 1.15x C) than the ratio flag's actual green
+// ceiling (1.2x C), so a week can legitimately sit above its own
+// corridor's max while the verdict -- and its dot -- still reads green.
+// Colouring the bar by "over this corridor" produced exactly that
+// contradiction (a red bar next to a green dot); the dot is the one and
+// only place status colour lives.
 function MiniBar({ kmWeek, kmMax, longestKm, lrMax, maxWeekKm }: { kmWeek: number; kmMax: number; longestKm: number; lrMax: number; maxWeekKm: number }) {
   const referenceMax = Number.isFinite(kmMax) ? kmMax : maxWeekKm;
   const scale = Math.max(referenceMax, kmWeek, 1) * 1.05;
   const pct = (v: number) => Math.max(0, Math.min(100, (v / scale) * 100));
-  const over = kmWeek > referenceMax;
 
   return (
     <div class="plan-row-bar-wrap">
       <div class="plan-row-bar">
-        <div class={`plan-row-bar-fill${over ? ' meter-fill-over' : ''}`} style={{ width: `${pct(kmWeek)}%` }} />
+        <div class="plan-row-bar-fill" style={{ width: `${pct(kmWeek)}%` }} />
         {Number.isFinite(lrMax) && <div class="plan-row-bar-lr" style={{ left: `${pct(longestKm)}%` }} title={`Long run: ${fmtKm(longestKm)} km`} />}
       </div>
       <span class="plan-row-bar-number">{fmtKm(kmWeek)} km</span>

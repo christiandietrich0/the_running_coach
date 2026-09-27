@@ -41,7 +41,7 @@ function taperOnly(race: RaceState) {
 // week's/Race week's name.
 export function weekChipLabel(week: WeekState, races: RaceState[]): { text: string; isRace: boolean } {
   if (week.type === 'RACE') {
-    return { text: week.raceName ? `Race day -- ${week.raceName}` : 'Race day', isRace: true };
+    return { text: week.raceName ? `Race day · ${week.raceName}` : 'Race day', isRace: true };
   }
   if (week.taperForRaceId != null) {
     const race = races.find((r) => r.id === week.taperForRaceId);

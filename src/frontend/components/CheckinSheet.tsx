@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+import { BottomSheet } from './BottomSheet';
 import type { CheckinPatch } from '../types';
 
 const REGIONS: { key: keyof Omit<CheckinPatch, 'reducedTraining'>; label: string }[] = [
@@ -30,44 +31,41 @@ export function CheckinSheet({
   }
 
   return (
-    <div class="sheet-overlay">
-      <div class="sheet">
-        <div class="sheet-title">Weekly check-in</div>
-        <p class="muted">How sore is each region right now, 0 (nothing) to 10 (can't run on it)?</p>
+    <BottomSheet title="Weekly check-in" onClose={onSkip}>
+      <p class="muted">How sore is each region right now, 0 (nothing) to 10 (can't run on it)?</p>
 
-        <form onSubmit={handleSubmit}>
-          {REGIONS.map((r) => (
-            <label class="checkin-region" key={r.key}>
-              <div class="checkin-region-top">
-                <span>{r.label}</span>
-                <span class="checkin-score">{scores[r.key]}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="1"
-                value={scores[r.key]}
-                onInput={(e) => setScore(r.key, Number(e.currentTarget.value))}
-              />
-            </label>
-          ))}
-
-          <label class="checkin-toggle">
-            <input type="checkbox" checked={reducedTraining} onChange={(e) => setReducedTraining(e.currentTarget.checked)} />
-            <span>Did pain make you reduce training last week?</span>
+      <form onSubmit={handleSubmit}>
+        {REGIONS.map((r) => (
+          <label class="checkin-region" key={r.key}>
+            <div class="checkin-region-top">
+              <span>{r.label}</span>
+              <span class="checkin-score">{scores[r.key]}</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="10"
+              step="1"
+              value={scores[r.key]}
+              onInput={(e) => setScore(r.key, Number(e.currentTarget.value))}
+            />
           </label>
+        ))}
 
-          <div class="field-actions">
-            <button type="button" class="btn-secondary" onClick={onSkip} disabled={saving}>
-              Skip for now
-            </button>
-            <button type="submit" class="btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : 'Save check-in'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <label class="checkin-toggle">
+          <input type="checkbox" checked={reducedTraining} onChange={(e) => setReducedTraining(e.currentTarget.checked)} />
+          <span>Did pain make you reduce training last week?</span>
+        </label>
+
+        <div class="field-actions">
+          <button type="button" class="btn-secondary" onClick={onSkip} disabled={saving}>
+            Skip for now
+          </button>
+          <button type="submit" class="btn-primary" disabled={saving}>
+            {saving ? 'Saving...' : 'Save check-in'}
+          </button>
+        </div>
+      </form>
+    </BottomSheet>
   );
 }

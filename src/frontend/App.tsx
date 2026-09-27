@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { fetchState, putCheckin } from './api';
+import { fetchState, putCheckin, runSync } from './api';
 import { CheckinSheet } from './components/CheckinSheet';
 import { TabBar, type ScreenId } from './components/TabBar';
 import { Chart } from './screens/Chart';
@@ -29,6 +29,15 @@ export function App() {
   function handleSkipCheckin() {
     if (state) dismissCheckin(state.currentWeekStart);
     setCheckinOpen(false);
+  }
+
+  // Pull-to-refresh on This Week (v1.1 mobile polish): a manual sync,
+  // same as Settings' "Sync now", then the fresh state -- so a pull down
+  // actually pulls in new runs, not just a UI repaint.
+  async function handleRefresh() {
+    await runSync('incremental');
+    const next = await fetchState();
+    setState(next);
   }
 
   async function handleSaveCheckin(patch: CheckinPatch) {
@@ -63,7 +72,7 @@ export function App() {
       )}
       {state && (
         <>
-          {screen === 'week' && <ThisWeek state={state} onOpenCheckin={() => setCheckinOpen(true)} />}
+          {screen === 'week' && <ThisWeek state={state} onOpenCheckin={() => setCheckinOpen(true)} onRefresh={handleRefresh} />}
           {screen === 'chart' && <Chart state={state} />}
           {screen === 'plan' && <Plan state={state} onStateChange={setState} />}
           {screen === 'races' && <Races state={state} onStateChange={setState} />}

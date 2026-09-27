@@ -1,90 +1,43 @@
 import { Chart as ChartJS, type Plugin } from 'chart.js';
-import { useEffect, useRef } from 'preact/hooks';
-import { cssVar, ensureChartRegistered, hatchPattern, withAlpha } from '../charts';
+import type { RefObject } from 'preact';
+import { useEffect } from 'preact/hooks';
+import { buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, hatchPattern, niceScale, withAlpha, type Metric } from '../charts';
 import { FLAG_COLOUR_LABEL, WEEK_TYPE_LABEL } from '../labels';
-import type { FlagColour, Settings, WeekState, WeekType } from '../types';
+import type { Settings, WeekState } from '../types';
 
-export type Metric = 'km' | 'effortKm' | 'dminus';
-
-interface Row {
-  weekStart: string;
-  isActual: boolean;
-  isRace: boolean;
-  raceName: string | null;
-  type: WeekType;
-  verdictColour: FlagColour;
-  longestKm: number;
-  dminusWeek: number;
-  value: number;
-  b1: number;
-  b2: number;
-  b3: number;
-  overlayValue: number;
-  overlayCap: number;
-}
-
-// Colour-zone boundaries and the long-run/descent overlay, per metric.
-// effort-km reuses the km-based C and the plain-km long run distance:
-// there's no separate effort-km chronic reference, and the week's longest
-// run doesn't carry its own elevation gain in the state payload, only the
-// week's aggregate does.
-function buildRows(weeks: WeekState[], metric: Metric, settings: Settings): Row[] {
-  return weeks.map((w) => {
-    const isRace = w.type === 'RACE';
-    const common = {
-      weekStart: w.weekStart,
-      isActual: w.isActual,
-      isRace,
-      raceName: w.raceName,
-      type: w.type,
-      verdictColour: w.verdict.colour,
-      longestKm: w.longestKm,
-      dminusWeek: w.dminusWeek,
-    };
-
-    if (metric === 'dminus') {
-      const dw4 = w.refs.DW4;
-      return {
-        ...common,
-        value: w.dminusWeek,
-        b1: 0,
-        b2: dw4 > 0 ? settings.weeklyDminusCapFactor * dw4 : 0,
-        b3: dw4 > 0 ? settings.weeklyDminusRedFactor * dw4 : 0,
-        overlayValue: w.longestLossM,
-        overlayCap: w.refs.D30 > 0 ? settings.singleRunDminusCapFactor * w.refs.D30 : 0,
-      };
-    }
-
-    const c = w.refs.C;
-    return {
-      ...common,
-      value: metric === 'km' ? w.kmWeek : w.effortKmWeek,
-      b1: c > 0 ? settings.ratioZoneEdges.lowVolume * c : 0,
-      b2: c > 0 ? settings.ratioZoneEdges.greenMax * c : 0,
-      b3: c > 0 ? settings.ratioZoneEdges.red * c : 0,
-      overlayValue: w.longestKm,
-      overlayCap: w.refs.LR30 > 0 ? settings.longRunCapFactor * w.refs.LR30 : 0,
-    };
-  });
-}
-
-function fmtLabel(weekStart: string): string {
-  return new Date(`${weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-}
-
-export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks: WeekState[]; metric: Metric; settings: Settings; currentWeekStart: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<ChartJS | null>(null);
-
+// Top row of the two-chart split (v1.1 mobile polish): the metric's weekly
+// bars, colour zone bands, the "Today" divider and race flags. Renders two
+// Chart.js instances -- a wide scrolling `plotCanvas` (the actual bars,
+// inside the horizontal scroller) and a narrow fixed `axisCanvas` (just the
+// y-axis ticks, pinned outside it) -- so the axis stays on screen while the
+// data scrolls under it. Both share the same y max/step/padding so their
+// tick rows land on the same pixel.
+export function useWeekBarsChart({
+  weeks,
+  metric,
+  settings,
+  currentWeekStart,
+  axisWidth,
+  axisCanvasRef,
+  plotCanvasRef,
+}: {
+  weeks: WeekState[];
+  metric: Metric;
+  settings: Settings;
+  currentWeekStart: string;
+  axisWidth: number;
+  axisCanvasRef: RefObject<HTMLCanvasElement>;
+  plotCanvasRef: RefObject<HTMLCanvasElement>;
+}) {
   useEffect(() => {
     ensureChartRegistered();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const axisCanvas = axisCanvasRef.current;
+    const plotCanvas = plotCanvasRef.current;
+    if (!axisCanvas || !plotCanvas) return;
 
-    const rows = buildRows(weeks, metric, settings);
-    const labels = rows.map((r) => fmtLabel(r.weekStart));
+    const rows = buildChartRows(weeks, metric, settings);
+    const labels = rows.map((r) => fmtWeekLabel(r.weekStart));
 
-    const fg = cssVar('--fg');
     const muted = cssVar('--muted');
     const cardBg = cssVar('--card-bg');
     const border = cssVar('--border');
@@ -96,12 +49,10 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
     const yellowBg = cssVar('--yellow-bg');
     const redBg = cssVar('--red-bg');
 
-    // Clamp the y max to 1.2x the largest bar (v1.1 UI pass), not the
-    // colour zones or the long-run/descent overlay -- a big outlier
-    // reference no longer stretches the whole axis; Chart.js clips
-    // anything above it instead.
-    const maxBar = Math.max(10, ...rows.map((r) => r.value));
-    const topY = maxBar * 1.2;
+    // Round the axis to a nice ceiling/step (v1.1 mobile polish) instead of
+    // raw max*1.2, which produced non-round ticks like 117.6.
+    const rawMax = Math.max(10, ...rows.map((r) => r.value));
+    const { max: topY, step } = niceScale(rawMax);
 
     // Planned bars use the same colour logic as actual ones (violet for a
     // race, fg otherwise) but lighter -- a faded hatch, not a different
@@ -111,10 +62,6 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
       return r.isActual ? color : hatchPattern(withAlpha(color, 0.55));
     });
 
-    // Chart.js's TS types get awkward for a mixed bar+line dataset array
-    // (each union member needs an exact discriminant), so this is built as
-    // plain data and handed to Chart.js untyped -- the shape is verified by
-    // hand below and at the browser check in the Phase 6 report.
     const bandBase = { type: 'line' as const, borderWidth: 0, pointRadius: 0, fill: '-1', order: 10, tension: 0 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,33 +82,10 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
         barPercentage: 0.85,
         maxBarThickness: 24,
       },
-      {
-        type: 'line',
-        label: 'cap',
-        data: rows.map((r) => r.overlayCap),
-        borderColor: muted,
-        borderDash: [5, 4],
-        borderWidth: 2,
-        pointRadius: 0,
-        fill: false,
-        order: 1,
-      },
-      {
-        type: 'line',
-        label: 'overlay',
-        data: rows.map((r) => r.overlayValue),
-        showLine: false,
-        pointRadius: 4.5,
-        pointBackgroundColor: fg,
-        pointBorderColor: cardBg,
-        pointBorderWidth: 2,
-        order: 0,
-      },
     ];
 
     // "Today": a vertical divider between the last actual bar and the
-    // first planned one, so the plan side of the chart reads distinctly
-    // from history at a glance (v1.1 UI pass).
+    // first planned one (v1.1 UI pass).
     const todayIdx = rows.findIndex((r) => r.weekStart === currentWeekStart);
     const todayLine: Plugin<'bar'> = {
       id: 'todayLine',
@@ -188,9 +112,7 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
       },
     };
 
-    // A small flag + the race's name above its bar (v1.1 UI pass) -- the
-    // bar colour alone (violet) already marks a race, but naming it
-    // doesn't need a tooltip tap.
+    // A small flag + the race's name above its bar (v1.1 UI pass).
     const raceFlags: Plugin<'bar'> = {
       id: 'raceFlags',
       afterDraw(chart) {
@@ -219,37 +141,45 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
       },
     };
 
-    chartRef.current?.destroy();
-    chartRef.current = new ChartJS(canvas, {
+    // Identical layout padding and x-scale config on both instances, so
+    // their chart areas -- and therefore the y-tick pixel rows -- match.
+    const sharedLayout = { padding: { top: 18 } };
+    const sharedX = { ticks: { display: false }, grid: { display: false } };
+
+    const plotChart = new ChartJS(plotCanvas, {
       data: { labels, datasets },
       plugins: [todayLine, raceFlags],
       options: {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        layout: { padding: { top: 18 } },
+        layout: sharedLayout,
+        interaction: { mode: 'index', axis: 'x', intersect: false },
         scales: {
-          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: { size: 11 } }, grid: { display: false } },
+          x: sharedX,
           y: {
             max: topY,
-            ticks: { color: muted, maxTicksLimit: 5, font: { size: 11 } },
+            ticks: { display: false },
             grid: { color: border, lineWidth: 1 },
             border: { display: false },
             beginAtZero: true,
+            afterFit: (scale) => {
+              scale.width = axisWidth;
+            },
           },
         },
         plugins: {
           legend: { display: false },
           tooltip: {
             filter: (item) => item.dataset.label === 'value',
-            backgroundColor: fg,
+            backgroundColor: cssVar('--fg'),
             titleColor: cardBg,
             bodyColor: cardBg,
             padding: 10,
             cornerRadius: 10,
             displayColors: false,
             callbacks: {
-              title: (items) => fmtLabel(rows[items[0].dataIndex].weekStart),
+              title: (items) => fmtWeekLabel(rows[items[0].dataIndex].weekStart),
               label: (item) => {
                 const row = rows[item.dataIndex];
                 const unit = metric === 'dminus' ? 'm' : 'km';
@@ -265,15 +195,33 @@ export function WeekChart({ weeks, metric, settings, currentWeekStart }: { weeks
       },
     });
 
-    return () => {
-      chartRef.current?.destroy();
-      chartRef.current = null;
-    };
-  }, [weeks, metric, settings, currentWeekStart]);
+    const axisChart = new ChartJS(axisCanvas, {
+      data: { labels: [''], datasets: [{ type: 'bar', label: 'value', data: [0] }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        layout: sharedLayout,
+        scales: {
+          x: sharedX,
+          y: {
+            max: topY,
+            ticks: { color: muted, stepSize: step, font: { size: 11 } },
+            grid: { display: false },
+            border: { display: false },
+            beginAtZero: true,
+            afterFit: (scale) => {
+              scale.width = axisWidth;
+            },
+          },
+        },
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      },
+    });
 
-  return (
-    <div class="chart-wrap">
-      <canvas ref={canvasRef} />
-    </div>
-  );
+    return () => {
+      plotChart.destroy();
+      axisChart.destroy();
+    };
+  }, [weeks, metric, settings, currentWeekStart, axisWidth, axisCanvasRef, plotCanvasRef]);
 }

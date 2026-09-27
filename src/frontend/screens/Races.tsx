@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import { deleteRace, putRace } from '../api';
+import { BottomSheet } from '../components/BottomSheet';
 import { RaceCard } from '../components/RaceCard';
 import { RaceForm } from '../components/RaceForm';
 import type { RacePatch, RaceState, StateResponse } from '../types';
@@ -49,40 +50,36 @@ export function Races({ state, onStateChange }: { state: StateResponse; onStateC
       <div class="card">
         <div class="card-title-row">
           <div class="card-title">Races</div>
-          {editing === null && (
-            <button type="button" class="btn-primary btn-small" onClick={() => setEditing('new')}>
-              Add race
-            </button>
-          )}
+          <button type="button" class="btn-primary btn-small" onClick={() => setEditing('new')}>
+            Add race
+          </button>
         </div>
         {error && <p class="form-error">{error}</p>}
-        {editing === 'new' && <RaceForm race={null} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} />}
       </div>
 
-      {races.length === 0 && editing === null && (
+      {races.length === 0 && (
         <div class="card">
           <p class="muted">No races yet. Add one to see targets, taper and feasibility.</p>
         </div>
       )}
 
-      {races.map((race) =>
-        editing === race.id ? (
-          <div class="card" key={race.id}>
-            <div class="card-title">Edit race</div>
-            <RaceForm race={editingRace} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} />
-          </div>
-        ) : (
-          <RaceCard
-            key={race.id}
-            race={race}
-            today={state.today}
-            peakWeekKm={state.weeks.find((w) => w.peakForRaceId === race.id)?.kmWeek ?? null}
-            weeksByStart={weeksByStart}
-            onEdit={() => setEditing(race.id)}
-            onDelete={() => handleDelete(race.id)}
-            deleting={deletingId === race.id}
-          />
-        ),
+      {races.map((race) => (
+        <RaceCard
+          key={race.id}
+          race={race}
+          today={state.today}
+          peakWeekKm={state.weeks.find((w) => w.peakForRaceId === race.id)?.kmWeek ?? null}
+          weeksByStart={weeksByStart}
+          onEdit={() => setEditing(race.id)}
+          onDelete={() => handleDelete(race.id)}
+          deleting={deletingId === race.id}
+        />
+      ))}
+
+      {editing !== null && (
+        <BottomSheet title={editing === 'new' ? 'Add race' : 'Edit race'} onClose={() => setEditing(null)}>
+          <RaceForm race={editing === 'new' ? null : editingRace} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} />
+        </BottomSheet>
       )}
     </div>
   );

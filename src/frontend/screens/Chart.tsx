@@ -1,5 +1,7 @@
-import { useState } from 'preact/hooks';
-import { WeekChart, type Metric } from '../components/WeekChart';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { useWeekBarsChart } from '../components/WeekBarsChart';
+import { useWeekOverlayChart } from '../components/WeekOverlayChart';
+import { buildChartRows, measureTickWidth, niceScale, type Metric } from '../charts';
 import type { StateResponse, WeekState } from '../types';
 
 const METRICS: { id: Metric; label: string }[] = [
@@ -8,7 +10,11 @@ const METRICS: { id: Metric; label: string }[] = [
   { id: 'dminus', label: 'Descent' },
 ];
 
-const LOOKBACK_WEEKS = 12;
+// Pixel pitch per week column (v1.1 mobile polish). Both charts share this
+// so their categories line up, and the scroll wrapper's inner width is
+// numWeeks * PX_PER_WEEK -- on a 390px phone that shows roughly 16 weeks
+// (8 back, 8 ahead of today) at once, with the rest reachable by swiping.
+const PX_PER_WEEK = 20;
 
 // Cuts the trailing run of blank future weeks (no plan yet). Nothing to
 // look at there yet, and a wall of empty hatched bars just reads as
@@ -30,10 +36,39 @@ function trimTrailingEmptyFuture(weeks: WeekState[], currentWeekStart: string): 
 
 export function Chart({ state }: { state: StateResponse }) {
   const [metric, setMetric] = useState<Metric>('km');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const barsAxisRef = useRef<HTMLCanvasElement>(null);
+  const barsPlotRef = useRef<HTMLCanvasElement>(null);
+  const overlayAxisRef = useRef<HTMLCanvasElement>(null);
+  const overlayPlotRef = useRef<HTMLCanvasElement>(null);
 
-  const currentIdx = state.weeks.findIndex((w) => w.weekStart === state.currentWeekStart);
-  const startIdx = currentIdx === -1 ? 0 : Math.max(0, currentIdx - LOOKBACK_WEEKS);
-  const weeks = trimTrailingEmptyFuture(state.weeks.slice(startIdx), state.currentWeekStart);
+  const weeks = trimTrailingEmptyFuture(state.weeks, state.currentWeekStart);
+  const width = weeks.length * PX_PER_WEEK;
+
+  // Both rows' y-axis columns are sized to fit their own widest tick label
+  // (descent-metres ticks like "2,000" need more room than km ticks do),
+  // then the shared column takes the larger of the two so neither clips.
+  const rows = buildChartRows(weeks, metric, state.settings);
+  const barsMax = niceScale(Math.max(10, ...rows.map((r) => r.value)));
+  const overlayMax = niceScale(Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap))), 4);
+  const axisWidth = Math.max(measureTickWidth(barsMax.max, barsMax.step, 11), measureTickWidth(overlayMax.max, overlayMax.step, 10));
+
+  useWeekBarsChart({ weeks, metric, settings: state.settings, currentWeekStart: state.currentWeekStart, axisWidth, axisCanvasRef: barsAxisRef, plotCanvasRef: barsPlotRef });
+  useWeekOverlayChart({ weeks, metric, settings: state.settings, axisWidth, axisCanvasRef: overlayAxisRef, plotCanvasRef: overlayPlotRef });
+
+  // Default scroll position centres today in the viewport, so the initial
+  // view is ~8 weeks back and ~8 ahead -- re-run only when the actual date
+  // range changes (a sync/regeneration), not on every re-render (e.g. a
+  // metric toggle), so switching metrics doesn't reset a manual scroll.
+  const rangeKey = weeks.length ? `${weeks[0].weekStart}_${weeks[weeks.length - 1].weekStart}` : '';
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const todayIdx = weeks.findIndex((w) => w.weekStart === state.currentWeekStart);
+    if (todayIdx === -1) return;
+    const target = (todayIdx + 0.5) * PX_PER_WEEK - el.clientWidth / 2;
+    el.scrollLeft = Math.max(0, target);
+  }, [rangeKey, state.currentWeekStart]);
 
   return (
     <div class="screen">
@@ -84,7 +119,26 @@ export function Chart({ state }: { state: StateResponse }) {
           </span>
         </div>
 
-        <WeekChart weeks={weeks} metric={metric} settings={state.settings} currentWeekStart={state.currentWeekStart} />
+        <div class="chart-body">
+          <div class="chart-axis-col" style={{ width: `${axisWidth}px` }}>
+            <div class="chart-wrap chart-wrap-bars">
+              <canvas ref={barsAxisRef} />
+            </div>
+            <div class="chart-wrap chart-wrap-overlay">
+              <canvas ref={overlayAxisRef} />
+            </div>
+          </div>
+          <div class="chart-scroll" ref={scrollRef}>
+            <div class="chart-scroll-inner" style={{ width: `${width}px` }}>
+              <div class="chart-wrap chart-wrap-bars">
+                <canvas ref={barsPlotRef} />
+              </div>
+              <div class="chart-wrap chart-wrap-overlay">
+                <canvas ref={overlayPlotRef} />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

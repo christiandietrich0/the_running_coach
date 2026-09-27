@@ -1,3 +1,5 @@
+import { TabIcon } from './TabIcon';
+
 export type ScreenId = 'week' | 'chart' | 'plan' | 'races' | 'settings';
 
 const TABS: { id: ScreenId; label: string }[] = [
@@ -13,7 +15,8 @@ export function TabBar({ active, onChange }: { active: ScreenId; onChange: (id: 
     <nav class="tab-bar">
       {TABS.map((tab) => (
         <button key={tab.id} class={`tab-button${tab.id === active ? ' tab-button-active' : ''}`} onClick={() => onChange(tab.id)}>
-          {tab.label}
+          <TabIcon id={tab.id} />
+          <span>{tab.label}</span>
         </button>
       ))}
     </nav>

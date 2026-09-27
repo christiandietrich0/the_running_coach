@@ -91,15 +91,29 @@ body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Digits never shift width as they change -- matters most for the big
+     headline number and the Plan mini-bar figures (v1.1 mobile polish). */
+  font-variant-numeric: tabular-nums;
 }
 
+/* Full-bleed on phones -- no centred column eating into the one width
+   that actually matters; a max-width column is a desktop-only nicety
+   (v1.1 mobile polish). */
 #app {
-  max-width: 480px;
-  margin: 0 auto;
+  width: 100%;
   min-height: 100vh;
   padding: var(--space-4);
   padding-top: max(var(--space-4), env(safe-area-inset-top));
   padding-bottom: calc(72px + max(var(--space-4), env(safe-area-inset-bottom)));
+  padding-left: max(var(--space-4), env(safe-area-inset-left));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
+}
+
+@media (min-width: 640px) {
+  #app {
+    max-width: 480px;
+    margin: 0 auto;
+  }
 }
 
 .card {
@@ -484,22 +498,39 @@ body {
   left: 0;
   right: 0;
   display: flex;
-  max-width: 480px;
-  margin: 0 auto;
   background: var(--card-bg);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+@media (min-width: 640px) {
+  .tab-bar {
+    max-width: 480px;
+    margin: 0 auto;
+  }
 }
 
 .tab-button {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
   border: none;
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 0.8rem;
-  padding: 14px 4px;
+  font-size: 0.72rem;
+  padding: 8px 4px;
   cursor: pointer;
+}
+
+.tab-icon {
+  flex-shrink: 0;
 }
 
 .tab-button-active {
@@ -533,10 +564,39 @@ body {
   color: var(--accent-fg);
 }
 
+.chart-body {
+  display: flex;
+  align-items: stretch;
+  margin-top: 4px;
+}
+
+.chart-axis-col {
+  flex-shrink: 0;
+}
+
+.chart-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-scroll-inner {
+  position: relative;
+}
+
 .chart-wrap {
   position: relative;
-  height: 280px;
-  margin-top: 4px;
+}
+
+.chart-wrap-bars {
+  height: 210px;
+}
+
+.chart-wrap-overlay {
+  height: 110px;
+  margin-top: 6px;
 }
 
 .chart-legend {
@@ -849,11 +909,6 @@ body {
   margin-top: 4px;
 }
 
-.plan-row-editing {
-  border-bottom: 1px solid var(--border);
-  padding: var(--space-3) 4px;
-}
-
 /* Plan row mini bar: km against its corridor, a dot for the long run */
 
 .plan-row-bar-wrap {
@@ -872,20 +927,17 @@ body {
   overflow: visible;
 }
 
+/* Neutral, constant colour -- never status-coloured (v1.1 mobile polish).
+   The row's own dot is the one place verdict colour lives; see MiniBar's
+   comment in PlanWeekRow.tsx for why a "red when over corridor" fill used
+   to contradict a green dot. */
 .plan-row-bar-fill {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   border-radius: 999px;
-  background: var(--accent);
-}
-
-/* Specific selector so this wins over .plan-row-bar-fill's own background
-   regardless of stylesheet order (v1.1 UI pass: a race week legitimately
-   exceeding the account's max-week cap still needs to read as "over"). */
-.plan-row-bar-fill.meter-fill-over {
-  background: var(--red);
+  background: var(--muted-2);
 }
 
 .plan-row-bar-lr {
@@ -1009,10 +1061,94 @@ body {
   overflow-y: auto;
 }
 
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 4px;
+}
+
 .sheet-title {
   font-weight: 700;
   font-size: 1.1rem;
-  margin-bottom: 4px;
+}
+
+.sheet-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--track-bg);
+  color: var(--muted);
+  border-radius: 50%;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* "How Legroom works" row + full-screen methodology sheet */
+
+.method-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.method-row-icon {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.method-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.method-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding: var(--space-4);
+  padding-top: max(var(--space-4), env(safe-area-inset-top));
+  padding-left: max(var(--space-4), env(safe-area-inset-left));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
+  border-bottom: 1px solid var(--border);
+}
+
+.method-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  padding-bottom: max(var(--space-5), env(safe-area-inset-bottom));
+  padding-left: max(var(--space-4), env(safe-area-inset-left));
+  padding-right: max(var(--space-4), env(safe-area-inset-right));
+}
+
+.method-body p {
+  margin: 0 0 var(--space-4);
+  line-height: 1.5;
+  color: var(--fg);
+}
+
+.method-body h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .checkin-region {
@@ -1045,6 +1181,37 @@ body {
 
 .checkin-toggle input {
   accent-color: var(--accent);
+}
+
+/* Pull-to-refresh indicator (This Week only) */
+
+.pull-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.15s ease;
+}
+
+.pull-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--track-bg);
+  border-top-color: var(--muted);
+  opacity: 0.7;
+}
+
+.pull-spinner-ready {
+  border-top-color: var(--accent);
+  opacity: 1;
+  animation: pull-spin 0.7s linear infinite;
+}
+
+@keyframes pull-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Settings screen */
