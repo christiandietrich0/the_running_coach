@@ -43,10 +43,13 @@ export function useWeekOverlayChart({
     const rawMax = Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap)));
     const { max: topY, step } = niceScale(rawMax, 4);
 
-    // Same layout padding on both instances so their chart areas match.
-    // The axis-only instance uses an invisible (but same-size) x tick label
-    // to reserve the same bottom space as the plot's real date labels.
+    // Same top padding on both instances so their chart areas match. The
+    // axis-only instance uses an invisible (but same-size) x tick label to
+    // reserve the same bottom space as the plot's real date labels. Only
+    // the wide, scrollable plot canvas gets left padding too (see
+    // WeekBarsChart for why) -- both plot canvases need the same value.
     const sharedLayout = { padding: { top: 4 } };
+    const plotLayout = { padding: { top: 4, left: 12 } };
     const xFont = { size: 10 };
 
     const plotChart = new ChartJS(plotCanvas, {
@@ -81,7 +84,7 @@ export function useWeekOverlayChart({
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        layout: sharedLayout,
+        layout: plotLayout,
         interaction: { mode: 'index', axis: 'x', intersect: false },
         scales: {
           x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: xFont }, grid: { display: false } },

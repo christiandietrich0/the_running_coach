@@ -7,7 +7,7 @@ export function PlanUpdatedNote({ onDismiss }: { onDismiss: () => void }) {
     <div class="card prompt">
       <div class="card-title-row">
         <div class="card-title">Plan updated from your latest runs</div>
-        <button type="button" class="btn-small" onClick={onDismiss}>
+        <button type="button" class="btn-secondary btn-small" onClick={onDismiss}>
           Dismiss
         </button>
       </div>

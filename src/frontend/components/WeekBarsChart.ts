@@ -141,9 +141,18 @@ export function useWeekBarsChart({
       },
     };
 
-    // Identical layout padding and x-scale config on both instances, so
-    // their chart areas -- and therefore the y-tick pixel rows -- match.
+    // Identical top padding and x-scale config on both instances, so their
+    // chart areas -- and therefore the y-tick pixel rows -- match. Only the
+    // wide, scrollable plot canvas also gets left padding: it keeps the
+    // very first week's x-axis label (in the overlay row below) from being
+    // sliced by the scroll container's edge when there isn't 8 weeks of
+    // history yet to scroll past (v1.1 polish). The narrow axis canvas
+    // doesn't scroll and doesn't need it -- adding it there would just push
+    // its already-tight tick numbers off its own right edge. Both plot
+    // canvases (this row and the overlay row) need the *same* left value
+    // to stay column-aligned with each other.
     const sharedLayout = { padding: { top: 18 } };
+    const plotLayout = { padding: { top: 18, left: 12 } };
     const sharedX = { ticks: { display: false }, grid: { display: false } };
 
     const plotChart = new ChartJS(plotCanvas, {
@@ -153,7 +162,7 @@ export function useWeekBarsChart({
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        layout: sharedLayout,
+        layout: plotLayout,
         interaction: { mode: 'index', axis: 'x', intersect: false },
         scales: {
           x: sharedX,
@@ -183,7 +192,12 @@ export function useWeekBarsChart({
               label: (item) => {
                 const row = rows[item.dataIndex];
                 const unit = metric === 'dminus' ? 'm' : 'km';
-                const lines = [`${WEEK_TYPE_LABEL[row.type]}${row.isActual ? '' : ' (planned)'}`, `${Math.round(row.value)} ${unit}`];
+                // A week that has started already has real (if still partial)
+                // numbers, not a forecast -- so it reads "done" as soon as
+                // it's the current week or earlier, not just once isActual
+                // (strictly before this week) flips true (v1.1 polish).
+                const started = row.weekStart <= currentWeekStart;
+                const lines = [`${WEEK_TYPE_LABEL[row.type]}${started ? ' (done)' : ' (planned)'}`, `${Math.round(row.value)} ${unit}`];
                 if (metric !== 'dminus') lines.push(`LR ${Math.round(row.longestKm)} km`);
                 lines.push(`D- ${Math.round(row.dminusWeek)} m`);
                 lines.push(`Verdict: ${FLAG_COLOUR_LABEL[row.verdictColour]}`);

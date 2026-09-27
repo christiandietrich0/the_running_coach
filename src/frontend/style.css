@@ -1274,9 +1274,12 @@ body {
 }
 
 .activity-list {
-  max-height: 420px;
-  overflow-y: auto;
   margin-top: var(--space-2);
+}
+
+.activity-show-more {
+  width: 100%;
+  margin-top: var(--space-3);
 }
 
 .activity-row {
