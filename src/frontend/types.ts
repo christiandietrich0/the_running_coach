@@ -98,7 +98,7 @@ export interface Feasibility {
   weeksNeeded: number;
   weeksAvailable: number;
   slack: number;
-  maxReachableLongRunKm?: number;
+  maxReachableLongRunKm: number;
   maxReachableWeekKm: number;
 }
 

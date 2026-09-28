@@ -10,10 +10,6 @@ export function Settings({ state, onStateChange }: { state: StateResponse; onSta
 
   return (
     <div class="screen">
-      <SyncPanel />
-      <SettingsForm state={state} onStateChange={onStateChange} />
-      <ActivityOverrideList onStateChange={onStateChange} />
-
       <button type="button" class="card method-row" onClick={() => setShowMethodology(true)}>
         <svg class="method-row-icon" viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="10" cy="10" r="8" />
@@ -21,6 +17,10 @@ export function Settings({ state, onStateChange }: { state: StateResponse; onSta
         </svg>
         <span>How Legroom works</span>
       </button>
+
+      <SyncPanel />
+      <SettingsForm state={state} onStateChange={onStateChange} />
+      <ActivityOverrideList onStateChange={onStateChange} />
 
       {showMethodology && <MethodologySheet onClose={() => setShowMethodology(false)} />}
     </div>

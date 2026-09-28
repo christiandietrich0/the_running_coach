@@ -101,7 +101,19 @@ body {
    (v1.1 mobile polish). */
 #app {
   width: 100%;
-  min-height: 100vh;
+  /* A definite height (not just min-height), so the Chart screen's flex
+     chain below has an actual available-space figure to distribute grow
+     against (v1.1 round 8 chart redesign) -- min-height alone leaves every
+     descendant's height "auto", which content (chart canvases) then drives
+     instead of the other way round. Nothing here clips: every screen but
+     Chart still overflows past 100dvh and scrolls the page exactly as
+     before, since no ancestor sets overflow:hidden except .screen-chart
+     itself. 100dvh (with a plain 100vh fallback for older browsers) avoids
+     the iOS Safari address-bar resize jank that a bare 100vh has. */
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   padding: var(--space-4);
   padding-top: max(var(--space-4), env(safe-area-inset-top));
   padding-bottom: calc(72px + max(var(--space-4), env(safe-area-inset-bottom)));
@@ -114,6 +126,17 @@ body {
     max-width: 480px;
     margin: 0 auto;
   }
+}
+
+/* The Chart screen is the one screen that fills the remaining viewport
+   height itself instead of scrolling the whole page (v1.1 round 8 chart
+   redesign) -- every other screen keeps flex's default (auto) height here
+   and just grows past the viewport as before. */
+.app-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .card {
@@ -538,12 +561,19 @@ body {
   font-weight: 600;
 }
 
-/* Chart screen */
+/* Chart screen (v1.1 round 8 redesign: no card, edge to edge, the two
+   charts split 65/35 down to the tab bar) */
+
+.screen-chart {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
 .metric-toggle {
   display: flex;
   gap: 6px;
-  margin-bottom: var(--space-3);
+  flex-shrink: 0;
 }
 
 .toggle-button {
@@ -567,11 +597,20 @@ body {
 .chart-body {
   display: flex;
   align-items: stretch;
-  margin-top: 4px;
+  flex: 1;
+  min-height: 0;
+  margin-top: var(--space-3);
+  /* Edge to edge: cancels #app's own side padding exactly, safe-area
+     insets included, instead of just the fixed --space-4 value. */
+  margin-left: calc(-1 * max(var(--space-4), env(safe-area-inset-left)));
+  margin-right: calc(-1 * max(var(--space-4), env(safe-area-inset-right)));
 }
 
 .chart-axis-col {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .chart-scroll {
@@ -584,6 +623,10 @@ body {
 
 .chart-scroll-inner {
   position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .chart-wrap {
@@ -591,51 +634,54 @@ body {
 }
 
 .chart-wrap-bars {
-  height: 210px;
+  flex: 65;
+  min-height: 0;
 }
 
 .chart-wrap-overlay {
-  height: 110px;
-  margin-top: 6px;
+  flex: 35;
+  min-height: 0;
 }
 
-.chart-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-  font-size: 0.74rem;
-  color: var(--muted);
-  max-height: 2.6em;
-  overflow: hidden;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-
-.legend-swatch {
+.chart-row-title {
+  position: sticky;
+  left: 4px;
+  top: 4px;
+  z-index: 2;
   display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.legend-swatch-line {
-  width: 14px;
+  /* A sticky element still reserves its own box in normal flow (unlike
+     absolute/fixed) -- zero height + visible overflow keeps it from
+     pushing the canvas that follows it down by its own height, while
+     still painting and tracking the horizontal scroll normally
+     (v1.1 round 8 chart redesign). */
   height: 0;
-  border-radius: 0;
-  border-top: 2px dashed var(--muted);
+  overflow: visible;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 2px 7px;
+  border-radius: 999px;
+  pointer-events: none;
 }
 
-.legend-swatch-hatch {
-  background-image: repeating-linear-gradient(45deg, var(--fg), var(--fg) 1.5px, transparent 1.5px, transparent 4px);
+@media (orientation: landscape) {
+  .app-header {
+    margin-bottom: var(--space-2);
+  }
+
+  .app-tagline {
+    display: none;
+  }
+
+  .chart-wrap-overlay {
+    display: none;
+  }
+
+  .chart-wrap-bars {
+    flex: 1;
+  }
 }
 
 /* Shared buttons and forms (Plan, Races) */

@@ -92,9 +92,18 @@ export function feasibility(race: Race, currentLR30: number, currentC: number, w
 
   const budget = Math.max(0, weeksAvailable - taperWeeksNeeded);
 
-  let maxReachableLongRunKm: number | undefined;
-  if (status === 'NOT_REACHABLE') {
-    maxReachableLongRunKm = reachableAt(currentLR30, budget, settings);
+  // Always computed now (v1.1 review round 8 item 2), not just when
+  // NOT_REACHABLE, so the reason line can always report it. When the
+  // long-run dimension is what's actually driving a NOT_REACHABLE verdict
+  // (it needs at least as many weeks as the volume dimension), a shortfall
+  // under 15% is close enough to call Tight rather than Not-reachable --
+  // the runner will land just under the peak long run, not badly short of
+  // it. A verdict driven by the *volume* dimension is left alone: how
+  // close the long run happens to land is beside the point there.
+  const maxReachableLongRunKm = reachableAt(currentLR30, budget, settings);
+  const longRunIsBinding = longRunWeeksNeeded >= volumeWeeksNeeded;
+  if (status === 'NOT_REACHABLE' && longRunIsBinding && targets.peakLongRunKm > 0 && maxReachableLongRunKm >= 0.85 * targets.peakLongRunKm) {
+    status = 'TIGHT';
   }
 
   const reachableC = reachableAt(currentC, budget, settings);

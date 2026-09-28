@@ -19,7 +19,7 @@ import {
   weeklyAggregates,
 } from '../logic';
 import { addDays, addWeeks, diffDays } from '../logic/dates';
-import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, Verdict, WeekType } from '../logic/types';
+import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
 import { getLastPlanUpdateAt, loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
 import type { Env } from './index';
@@ -38,6 +38,29 @@ function nextABRacePeakLR(races: Race[], weekStart: string, settings: Defaults):
     .filter((r) => (r.priority === 'A' || r.priority === 'B') && mondayOf(r.date) >= weekStart)
     .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
   return upcoming ? raceTargets(upcoming, settings).peakLongRunKm : undefined;
+}
+
+// buildDenseTimeline() (src/logic/aggregate.ts) only prefers real data over
+// a plan row's own km/dminus/long-run figures when both already exist for
+// a week (the usual case once the current week has at least one logged
+// run) -- a brand-new week with a plan row but zero actual runs yet
+// otherwise falls through to the plan row's own numbers verbatim. That's
+// the right call for computing corridor/reference *targets*, but "This
+// Week" and the chart read this entry as what has actually happened so
+// far, and must not show the plan's target as if it were done. Mutates
+// the current week's entry back to zero/no-data in place, before
+// references()/flags()/verdict()/guidance in buildState() below ever see
+// it, so a fresh week with no logged runs reads as 0 done, not the plan's
+// km (v1.1 review round 8 item 1).
+export function suppressPlannedCurrentWeek(dense: TimelinePoint[], currentWeekStart: string, hasActualThisWeek: boolean): void {
+  if (hasActualThisWeek) return;
+  const current = dense.find((w) => w.weekStart === currentWeekStart);
+  if (!current) return;
+  current.kmWeek = 0;
+  current.dminusWeek = 0;
+  current.longRunKm = null;
+  current.longRunLossM = null;
+  current.longRunDate = null;
 }
 
 export interface WeekStateDTO {
@@ -151,6 +174,8 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const today = new Date().toISOString();
   const currentWeekStart = mondayOf(today);
   const dense = buildDenseTimeline(actualAggregates, planWeeks, currentWeekStart, addWeeks(currentWeekStart, CHART_LOOKAHEAD_WEEKS));
+
+  suppressPlannedCurrentWeek(dense, currentWeekStart, aggByWeek.has(currentWeekStart));
 
   // Days left in the current week, counting today (v1.1 review round 3
   // item 2): the last day of the week itself has exactly 1 remaining, not

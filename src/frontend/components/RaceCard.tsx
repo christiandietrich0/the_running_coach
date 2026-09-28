@@ -59,9 +59,7 @@ export function RaceCard({
         <div class="race-meta">
           <span class={`pill pill-${feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[feasibility.status]}</span>
           <span class="muted">
-            {feasibility.status === 'NOT_REACHABLE' && feasibility.maxReachableLongRunKm != null
-              ? `Max reachable long run by race day: ${fmtKm(feasibility.maxReachableLongRunKm)} km`
-              : `${feasibility.weeksNeeded} weeks needed, ${feasibility.weeksAvailable} available`}
+            Long run reachable: {fmtKm(feasibility.maxReachableLongRunKm)} km (target {fmtKm(targets.peakLongRunKm)} km)
           </span>
           {cappedAtKm != null && cappedAtKm < targets.peakWeekEffortKm - 0.5 && (
             <span class="muted">

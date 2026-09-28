@@ -159,7 +159,11 @@ export interface Feasibility {
   weeksNeeded: number;
   weeksAvailable: number;
   slack: number;
-  maxReachableLongRunKm?: number;
+  // The long run actually reachable by race day, given how many Build
+  // steps fit in the weeks available (v1.1 review round 8 item 2). Always
+  // set, like maxReachableWeekKm below, so the "Long run reachable" reason
+  // line can always show it, not just when status is NOT_REACHABLE.
+  maxReachableLongRunKm: number;
   // The highest peak-week km actually reachable by race day, given how
   // many Build steps fit in the weeks available (v1.1 review round 6):
   // suggestPlan() clamps every generated week -- including the peak -- to

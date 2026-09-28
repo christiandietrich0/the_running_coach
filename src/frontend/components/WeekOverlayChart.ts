@@ -1,7 +1,7 @@
 import { Chart as ChartJS } from 'chart.js';
 import type { RefObject } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, niceScale, type Metric } from '../charts';
+import { AXIS_FONT_FAMILY, buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, niceScale, withAlpha, type Metric } from '../charts';
 import type { Settings, WeekState } from '../types';
 
 // Bottom row of the two-chart split (v1.1 mobile polish): just the
@@ -37,7 +37,9 @@ export function useWeekOverlayChart({
 
     const fg = cssVar('--fg');
     const muted = cssVar('--muted');
+    const bg = cssVar('--bg');
     const cardBg = cssVar('--card-bg');
+    const accent = cssVar('--accent');
     const border = cssVar('--border');
 
     const rawMax = Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap)));
@@ -61,8 +63,8 @@ export function useWeekOverlayChart({
             label: 'cap',
             data: rows.map((r) => r.overlayCap),
             borderColor: muted,
-            borderDash: [5, 4],
-            borderWidth: 2,
+            borderDash: [3, 3],
+            borderWidth: 1.5,
             pointRadius: 0,
             fill: false,
             order: 1,
@@ -72,10 +74,10 @@ export function useWeekOverlayChart({
             label: 'overlay',
             data: rows.map((r) => r.overlayValue),
             showLine: false,
-            pointRadius: 4,
-            pointBackgroundColor: fg,
-            pointBorderColor: cardBg,
-            pointBorderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: accent,
+            pointBorderColor: bg,
+            pointBorderWidth: 1.5,
             order: 0,
           },
         ],
@@ -87,11 +89,11 @@ export function useWeekOverlayChart({
         layout: plotLayout,
         interaction: { mode: 'index', axis: 'x', intersect: false },
         scales: {
-          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: xFont }, grid: { display: false } },
+          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: xFont }, grid: { display: false }, border: { display: false } },
           y: {
             max: topY,
             ticks: { display: false },
-            grid: { color: border, lineWidth: 1 },
+            grid: { color: withAlpha(border, 0.6), lineWidth: 1 },
             border: { display: false },
             beginAtZero: true,
             afterFit: (scale) => {
@@ -131,10 +133,10 @@ export function useWeekOverlayChart({
         animation: false,
         layout: sharedLayout,
         scales: {
-          x: { ticks: { color: 'transparent', maxRotation: 0, font: xFont }, grid: { display: false } },
+          x: { ticks: { color: 'transparent', maxRotation: 0, font: xFont }, grid: { display: false }, border: { display: false } },
           y: {
             max: topY,
-            ticks: { color: muted, stepSize: step, font: { size: 10 } },
+            ticks: { color: muted, stepSize: step, font: { size: 10, family: AXIS_FONT_FAMILY } },
             grid: { display: false },
             border: { display: false },
             beginAtZero: true,

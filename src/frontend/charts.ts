@@ -9,6 +9,14 @@ export type Metric = 'km' | 'effortKm' | 'dminus';
 // wide the tick label text happens to be.
 export const Y_AXIS_WIDTH = 34;
 
+// Charts always set this explicitly on every tick font (both the real
+// axis-only canvas and the offscreen measurement in measureTickWidth
+// below) -- Chart.js's own default tick font family doesn't match, so
+// leaving it unset measured one width and rendered another, wide enough
+// to clip the leading digit of "150"-style labels off the narrow axis
+// column (v1.1 round 8 chart redesign).
+export const AXIS_FONT_FAMILY = '-apple-system, sans-serif';
+
 export interface ChartRow {
   weekStart: string;
   isActual: boolean;
@@ -125,12 +133,12 @@ export function measureTickWidth(maxValue: number, step: number, fontPx: number)
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) return Y_AXIS_WIDTH;
-  ctx.font = `${fontPx}px -apple-system, sans-serif`;
+  ctx.font = `${fontPx}px ${AXIS_FONT_FAMILY}`;
   let widest = 0;
   for (let v = 0; v <= maxValue + 1e-6; v += step) {
     widest = Math.max(widest, ctx.measureText(Math.round(v).toLocaleString('en-US')).width);
   }
-  return Math.max(Y_AXIS_WIDTH, Math.ceil(widest) + 10);
+  return Math.max(Y_AXIS_WIDTH, Math.ceil(widest) + 14);
 }
 
 // Fades a `#rrggbb` CSS custom property down to a given alpha, for planned
@@ -145,28 +153,4 @@ export function withAlpha(hexColor: string, alpha: number): string {
   const g = (n >> 8) & 255;
   const b = n & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-// A diagonal-stripe canvas pattern for planned (not-yet-happened) bars, so
-// they read as "hatched" against solid bars for actual weeks (mechanics
-// brief 8.2). Planned bars use a thinner stroke on a wider pitch than
-// before (v1.1 UI pass), reading as visibly lighter than a solid bar of
-// the same colour logic, not just a different fill.
-export function hatchPattern(color: string): CanvasPattern | string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 10;
-  canvas.height = 10;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, 10);
-  ctx.lineTo(10, 0);
-  ctx.moveTo(-2.5, 2.5);
-  ctx.lineTo(2.5, -2.5);
-  ctx.moveTo(7.5, 12.5);
-  ctx.lineTo(12.5, 7.5);
-  ctx.stroke();
-  return ctx.createPattern(canvas, 'repeat') ?? color;
 }

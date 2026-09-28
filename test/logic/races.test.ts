@@ -77,14 +77,49 @@ describe('feasibility', () => {
     expect(f.status).toBe('TIGHT');
   });
 
-  it('is not safely reachable with too few weeks, and reports the max reachable long run', () => {
+  it('reports the max reachable long run even when it falls short', () => {
     const f = feasibility(r, 25, 50, 1, DEFAULTS);
-    expect(f.status).toBe('NOT_REACHABLE');
     expect(f.maxReachableLongRunKm).toBeCloseTo(25); // no room for even one Build step
   });
 
   it('treats no LR30 baseline as not reachable', () => {
     const f = feasibility(r, 0, 50, 10, DEFAULTS);
+    expect(f.status).toBe('NOT_REACHABLE');
+    expect(f.maxReachableLongRunKm).toBeCloseTo(0);
+  });
+});
+
+// v1.1 review round 8 item 2: a race whose long-run growth projection
+// comes up just short of the peak target used to read as flatly
+// Not-reachable, the same as one that comes up wildly short. Landing
+// within 15% of the target is close enough to call Tight instead.
+describe('feasibility: Tight-vs-Not-reachable long-run rescue at 85%', () => {
+  // Same 60km B race as above: peak_long_run = 27km, 2 taper weeks.
+  const r = race({ priority: 'B', km: 60, dplusM: 0 });
+
+  it('reads Tight, not Not-reachable, when the reachable long run is within 15% of the target', () => {
+    // budget = weeksAvailable(1) - taper(2) -> clamped to 0, so the
+    // reachable long run stays at the baseline: 25 / 27 = 92.6%, well
+    // above the 85% floor.
+    const f = feasibility(r, 25, 50, 1, DEFAULTS);
+    expect(f.maxReachableLongRunKm).toBeCloseTo(25);
+    expect(f.status).toBe('TIGHT');
+  });
+
+  it('stays Not-reachable when the reachable long run falls below 85% of the target', () => {
+    // 20 / 27 = 74%, below the floor.
+    const f = feasibility(r, 20, 50, 1, DEFAULTS);
+    expect(f.maxReachableLongRunKm).toBeCloseTo(20);
+    expect(f.status).toBe('NOT_REACHABLE');
+  });
+
+  it("doesn't rescue a race that's Not-reachable on weekly volume, however close the long run lands", () => {
+    // currentLR30=50 is already far above this race's 27km peak long run
+    // (reachable stays at 50, comfortably over target) -- but currentC=10
+    // makes the *volume* dimension the binding, unreachable one, and the
+    // rescue only ever looks at the long-run dimension.
+    const f = feasibility(r, 50, 10, 2, DEFAULTS);
+    expect(f.maxReachableLongRunKm).toBeGreaterThan(raceTargets(r, DEFAULTS).peakLongRunKm);
     expect(f.status).toBe('NOT_REACHABLE');
   });
 });

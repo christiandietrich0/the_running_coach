@@ -55,7 +55,7 @@ export function App() {
   }
 
   return (
-    <div>
+    <div class="app-root">
       <div class="app-header">
         <h1 class="app-title">Legroom</h1>
         <p class="app-tagline">How much room your legs have this week.</p>

@@ -1,12 +1,13 @@
 import { Chart as ChartJS, type Plugin } from 'chart.js';
 import type { RefObject } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, hatchPattern, niceScale, withAlpha, type Metric } from '../charts';
+import { AXIS_FONT_FAMILY, buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, niceScale, withAlpha, type Metric } from '../charts';
 import { FLAG_COLOUR_LABEL, WEEK_TYPE_LABEL } from '../labels';
 import type { Settings, WeekState } from '../types';
 
-// Top row of the two-chart split (v1.1 mobile polish): the metric's weekly
-// bars, colour zone bands, the "Today" divider and race flags. Renders two
+// Top row of the two-chart split (v1.1 mobile polish, calmed down in the
+// v1.1 round 8 chart redesign): the metric's weekly bars, a single soft
+// green band, the "Today" divider and a small race flag. Renders two
 // Chart.js instances -- a wide scrolling `plotCanvas` (the actual bars,
 // inside the horizontal scroller) and a narrow fixed `axisCanvas` (just the
 // y-axis ticks, pinned outside it) -- so the axis stays on screen while the
@@ -40,43 +41,50 @@ export function useWeekBarsChart({
 
     const muted = cssVar('--muted');
     const cardBg = cssVar('--card-bg');
-    const border = cssVar('--border');
-    const barColor = cssVar('--fg');
-    const raceColor = cssVar('--violet');
+    const border = withAlpha(cssVar('--border'), 0.6);
     const accent = cssVar('--accent');
-    const blueBg = cssVar('--blue-bg');
+    const raceColor = cssVar('--violet');
+    const yellow = cssVar('--yellow');
+    const red = cssVar('--red');
     const greenBg = cssVar('--green-bg');
-    const yellowBg = cssVar('--yellow-bg');
-    const redBg = cssVar('--red-bg');
 
-    // Round the axis to a nice ceiling/step (v1.1 mobile polish) instead of
-    // raw max*1.2, which produced non-round ticks like 117.6.
+    // Round the axis to a nice ceiling/step (v1.1 mobile polish), 3-4
+    // ticks (v1.1 round 8 redesign) instead of raw max*1.2, which produced
+    // non-round ticks like 117.6.
     const rawMax = Math.max(10, ...rows.map((r) => r.value));
-    const { max: topY, step } = niceScale(rawMax);
+    const { max: topY, step } = niceScale(rawMax, 4);
 
-    // Planned bars use the same colour logic as actual ones (violet for a
-    // race, fg otherwise) but lighter -- a faded hatch, not a different
-    // hue (v1.1 UI pass).
-    const barBackgrounds = rows.map((r) => {
-      const color = r.isRace ? raceColor : barColor;
-      return r.isActual ? color : hatchPattern(withAlpha(color, 0.55));
-    });
-
-    const bandBase = { type: 'line' as const, borderWidth: 0, pointRadius: 0, fill: '-1', order: 10, tension: 0 };
+    // A bar is accent-coloured by default; it only turns yellow or red when
+    // that week is actually flagged, and violet on a race week regardless
+    // of its verdict (v1.1 round 8 redesign) -- the zone bands themselves
+    // are gone except for the single soft green band below. Past weeks are
+    // solid; a planned (not yet actual) week is a light tint of the same
+    // colour with a thin outline, not a hatch.
+    function baseColor(r: (typeof rows)[number]): string {
+      if (r.isRace) return raceColor;
+      if (r.verdictColour === 'YELLOW') return yellow;
+      if (r.verdictColour === 'RED') return red;
+      return accent;
+    }
+    const barBackgrounds = rows.map((r) => (r.isActual ? baseColor(r) : withAlpha(baseColor(r), 0.16)));
+    const barBorders = rows.map((r) => baseColor(r));
+    const barBorderWidths = rows.map((r) => (r.isActual ? 0 : 1.5));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const datasets: any[] = [
-      { type: 'line', label: 'zero', data: rows.map(() => 0), borderWidth: 0, pointRadius: 0, order: 10 },
-      { ...bandBase, label: 'blue-zone', data: rows.map((r) => r.b1), backgroundColor: blueBg },
-      { ...bandBase, label: 'green-zone', data: rows.map((r) => r.b2), backgroundColor: greenBg },
-      { ...bandBase, label: 'yellow-zone', data: rows.map((r) => r.b3), backgroundColor: yellowBg },
-      { ...bandBase, label: 'red-zone', data: rows.map(() => topY), backgroundColor: redBg },
+      // A hidden reference line at the green band's floor, and the actual
+      // band filled up to its ceiling against that floor (fill: '-1') --
+      // the only zone shading left after the redesign (v1.1 round 8).
+      { type: 'line', label: 'green-floor', data: rows.map((r) => r.b1), borderWidth: 0, pointRadius: 0, fill: false, order: 10 },
+      { type: 'line', label: 'green-zone', data: rows.map((r) => r.b2), borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: greenBg, order: 10 },
       {
         type: 'bar',
         label: 'value',
         data: rows.map((r) => r.value),
         backgroundColor: barBackgrounds,
-        borderRadius: 4,
+        borderColor: barBorders,
+        borderWidth: barBorderWidths,
+        borderRadius: 5,
         order: 2,
         categoryPercentage: 0.9,
         barPercentage: 0.85,
@@ -84,8 +92,8 @@ export function useWeekBarsChart({
       },
     ];
 
-    // "Today": a vertical divider between the last actual bar and the
-    // first planned one (v1.1 UI pass).
+    // "Today": a thin divider between the last actual bar and the first
+    // planned one, with a small label (v1.1 round 8 redesign).
     const todayIdx = rows.findIndex((r) => r.weekStart === currentWeekStart);
     const todayLine: Plugin<'bar'> = {
       id: 'todayLine',
@@ -97,22 +105,23 @@ export function useWeekBarsChart({
         const ctx = chart.ctx;
         ctx.save();
         ctx.strokeStyle = accent;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
         ctx.beginPath();
         ctx.moveTo(x, top);
         ctx.lineTo(x, bottom);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = accent;
-        ctx.font = '600 10px -apple-system, sans-serif';
+        ctx.font = '600 9px -apple-system, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('Today', x, top - 4);
         ctx.restore();
       },
     };
 
-    // A small flag + the race's name above its bar (v1.1 UI pass).
+    // A small flag on a race week's bar -- the name moved into the
+    // tooltip (v1.1 round 8 redesign), so the chart itself stays quiet.
     const raceFlags: Plugin<'bar'> = {
       id: 'raceFlags',
       afterDraw(chart) {
@@ -125,17 +134,12 @@ export function useWeekBarsChart({
           ctx.save();
           ctx.fillStyle = raceColor;
           ctx.beginPath();
-          ctx.moveTo(x, top - 2);
-          ctx.lineTo(x + 8, top + 3);
-          ctx.lineTo(x, top + 8);
+          ctx.moveTo(x, top - 1);
+          ctx.lineTo(x + 7, top + 3);
+          ctx.lineTo(x, top + 7);
           ctx.closePath();
           ctx.fill();
-          ctx.fillRect(x - 1, top - 2, 1.5, 14);
-          if (r.raceName) {
-            ctx.font = '600 10px -apple-system, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.fillText(r.raceName, x + 11, top + 7);
-          }
+          ctx.fillRect(x - 1, top - 1, 1.5, 12);
           ctx.restore();
         });
       },
@@ -151,9 +155,9 @@ export function useWeekBarsChart({
     // its already-tight tick numbers off its own right edge. Both plot
     // canvases (this row and the overlay row) need the *same* left value
     // to stay column-aligned with each other.
-    const sharedLayout = { padding: { top: 18 } };
-    const plotLayout = { padding: { top: 18, left: 12 } };
-    const sharedX = { ticks: { display: false }, grid: { display: false } };
+    const sharedLayout = { padding: { top: 16 } };
+    const plotLayout = { padding: { top: 16, left: 12 } };
+    const sharedX = { ticks: { display: false }, grid: { display: false }, border: { display: false } };
 
     const plotChart = new ChartJS(plotCanvas, {
       data: { labels, datasets },
@@ -197,7 +201,9 @@ export function useWeekBarsChart({
                 // it's the current week or earlier, not just once isActual
                 // (strictly before this week) flips true (v1.1 polish).
                 const started = row.weekStart <= currentWeekStart;
-                const lines = [`${WEEK_TYPE_LABEL[row.type]}${started ? ' (done)' : ' (planned)'}`, `${Math.round(row.value)} ${unit}`];
+                const lines = [`${WEEK_TYPE_LABEL[row.type]}${started ? ' (done)' : ' (planned)'}`];
+                if (row.isRace && row.raceName) lines.push(row.raceName);
+                lines.push(`${Math.round(row.value)} ${unit}`);
                 if (metric !== 'dminus') lines.push(`LR ${Math.round(row.longestKm)} km`);
                 lines.push(`D- ${Math.round(row.dminusWeek)} m`);
                 lines.push(`Verdict: ${FLAG_COLOUR_LABEL[row.verdictColour]}`);
@@ -220,7 +226,7 @@ export function useWeekBarsChart({
           x: sharedX,
           y: {
             max: topY,
-            ticks: { color: muted, stepSize: step, font: { size: 11 } },
+            ticks: { color: muted, stepSize: step, font: { size: 11, family: AXIS_FONT_FAMILY } },
             grid: { display: false },
             border: { display: false },
             beginAtZero: true,

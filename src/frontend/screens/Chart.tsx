@@ -10,6 +10,11 @@ const METRICS: { id: Metric; label: string }[] = [
   { id: 'dminus', label: 'Descent' },
 ];
 
+// Short per-chart titles (v1.1 round 8 chart redesign) -- there's no
+// legend any more, so these plus the tooltip carry the meaning instead.
+const BARS_TITLE: Record<Metric, string> = { km: 'Weekly km', effortKm: 'Weekly effort km', dminus: 'Weekly descent' };
+const OVERLAY_TITLE: Record<Metric, string> = { km: 'Long run vs cap', effortKm: 'Long run vs cap', dminus: 'Biggest single descent vs cap' };
+
 // Pixel pitch per week column (v1.1 mobile polish). Both charts share this
 // so their categories line up, and the scroll wrapper's inner width is
 // numWeeks * PX_PER_WEEK -- on a 390px phone that shows roughly 16 weeks
@@ -49,7 +54,7 @@ export function Chart({ state }: { state: StateResponse }) {
   // (descent-metres ticks like "2,000" need more room than km ticks do),
   // then the shared column takes the larger of the two so neither clips.
   const rows = buildChartRows(weeks, metric, state.settings);
-  const barsMax = niceScale(Math.max(10, ...rows.map((r) => r.value)));
+  const barsMax = niceScale(Math.max(10, ...rows.map((r) => r.value)), 4);
   const overlayMax = niceScale(Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap))), 4);
   const axisWidth = Math.max(measureTickWidth(barsMax.max, barsMax.step, 11), measureTickWidth(overlayMax.max, overlayMax.step, 10));
 
@@ -71,71 +76,33 @@ export function Chart({ state }: { state: StateResponse }) {
   }, [rangeKey, state.currentWeekStart]);
 
   return (
-    <div class="screen">
-      <div class="card">
-        <div class="card-title">Load over time</div>
-        <div class="metric-toggle">
-          {METRICS.map((m) => (
-            <button key={m.id} class={`toggle-button${m.id === metric ? ' toggle-button-active' : ''}`} onClick={() => setMetric(m.id)}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+    <div class="screen screen-chart">
+      <div class="metric-toggle">
+        {METRICS.map((m) => (
+          <button key={m.id} class={`toggle-button${m.id === metric ? ' toggle-button-active' : ''}`} onClick={() => setMetric(m.id)}>
+            {m.label}
+          </button>
+        ))}
+      </div>
 
-        <div class="chart-legend">
-          {metric !== 'dminus' && (
-            <span class="legend-item">
-              <span class="legend-swatch" style={{ background: 'var(--blue)' }} />
-              Low
-            </span>
-          )}
-          <span class="legend-item">
-            <span class="legend-swatch" style={{ background: 'var(--green)' }} />
-            Good
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch" style={{ background: 'var(--yellow)' }} />
-            Caution
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch" style={{ background: 'var(--red)' }} />
-            Over
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch" style={{ background: 'var(--fg)' }} />
-            {metric === 'dminus' ? 'Longest' : 'LR'}
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch legend-swatch-line" />
-            Cap
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch legend-swatch-hatch" />
-            Planned
-          </span>
-          <span class="legend-item">
-            <span class="legend-swatch" style={{ background: 'var(--violet)' }} />
-            Race
-          </span>
+      <div class="chart-body">
+        <div class="chart-axis-col" style={{ width: `${axisWidth}px` }}>
+          <div class="chart-wrap chart-wrap-bars">
+            <canvas ref={barsAxisRef} />
+          </div>
+          <div class="chart-wrap chart-wrap-overlay">
+            <canvas ref={overlayAxisRef} />
+          </div>
         </div>
-
-        <div class="chart-body">
-          <div class="chart-axis-col" style={{ width: `${axisWidth}px` }}>
+        <div class="chart-scroll" ref={scrollRef}>
+          <div class="chart-scroll-inner" style={{ width: `${width}px` }}>
             <div class="chart-wrap chart-wrap-bars">
-              <canvas ref={barsAxisRef} />
+              <span class="chart-row-title">{BARS_TITLE[metric]}</span>
+              <canvas ref={barsPlotRef} />
             </div>
             <div class="chart-wrap chart-wrap-overlay">
-              <canvas ref={overlayAxisRef} />
-            </div>
-          </div>
-          <div class="chart-scroll" ref={scrollRef}>
-            <div class="chart-scroll-inner" style={{ width: `${width}px` }}>
-              <div class="chart-wrap chart-wrap-bars">
-                <canvas ref={barsPlotRef} />
-              </div>
-              <div class="chart-wrap chart-wrap-overlay">
-                <canvas ref={overlayPlotRef} />
-              </div>
+              <span class="chart-row-title">{OVERLAY_TITLE[metric]}</span>
+              <canvas ref={overlayPlotRef} />
             </div>
           </div>
         </div>
