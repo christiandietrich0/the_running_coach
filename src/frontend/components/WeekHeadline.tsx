@@ -8,7 +8,7 @@ import type { WeekState } from '../types';
 // it's laid out, not what it says.
 export function WeekHeadline({ week }: { week: WeekState }) {
   const g = week.guidance;
-  const doneKm = fmtKm(week.kmWeek);
+  const doneKm = fmtKm(week.doneKmWeek);
 
   if (g?.targetMet) {
     return (

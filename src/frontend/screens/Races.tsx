@@ -68,7 +68,10 @@ export function Races({ state, onStateChange }: { state: StateResponse; onStateC
           key={race.id}
           race={race}
           today={state.today}
-          peakWeekKm={state.weeks.find((w) => w.peakForRaceId === race.id)?.kmWeek ?? null}
+          peakWeekKm={(() => {
+            const peak = state.weeks.find((w) => w.peakForRaceId === race.id);
+            return peak ? (peak.plannedKm ?? peak.kmWeek) : null;
+          })()}
           weeksByStart={weeksByStart}
           onEdit={() => setEditing(race.id)}
           onDelete={() => handleDelete(race.id)}

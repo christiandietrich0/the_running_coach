@@ -5,6 +5,7 @@ import { flags, verdict } from '../../src/logic/flags';
 import { raceSlotWeekType, raceStructureSlots, suggestPlan } from '../../src/logic/plan';
 import { isReentryWeek, references } from '../../src/logic/references';
 import { DEFAULTS } from '../../src/worker/defaults';
+import { blendCurrentWeekReference } from '../../src/worker/state';
 import type { PlanWeek, Race, WeekType, WeeklyAggregate } from '../../src/logic/types';
 
 function week(weekStart: string, kmWeek: number): WeeklyAggregate {
@@ -508,7 +509,14 @@ describe('suggestPlan', () => {
 // flag (or any other) at yellow or red -- it can only ever be green or, at
 // worst, the informational blue low-volume flag. Runs flags() the same way
 // state.ts's buildState() does, over every week suggestPlan generated.
-function assertNeverFlagsYellowOrRed(actualAggregates: WeeklyAggregate[], races: Race[], horizonWeeks: number): void {
+//
+// currentWeekPartialKm simulates the round 9 item 4 scenario: the current
+// week has started with only a small amount logged so far, nowhere near
+// its own plan target. Without blendCurrentWeekReference (the same
+// buildState() applies in production) raising that week's reference up to
+// its planned figure, the week right after it would read as a huge jump
+// over an artificially low "previous week" and wrongly flag yellow/red.
+function assertNeverFlagsYellowOrRed(actualAggregates: WeeklyAggregate[], races: Race[], horizonWeeks: number, currentWeekPartialKm?: number): void {
   const plan = suggestPlan({
     currentWeekStart: CURRENT,
     existingPlan: [],
@@ -519,7 +527,14 @@ function assertNeverFlagsYellowOrRed(actualAggregates: WeeklyAggregate[], races:
     horizonWeeks,
   });
 
-  const dense = buildDenseTimeline(actualAggregates, plan);
+  const aggregatesForDense =
+    currentWeekPartialKm != null ? [...actualAggregates, { ...week(CURRENT, currentWeekPartialKm), runsWeek: 1 }] : actualAggregates;
+  const dense = buildDenseTimeline(aggregatesForDense, plan);
+  if (currentWeekPartialKm != null) {
+    const planByWeek = new Map(plan.map((w) => [w.weekStart, w]));
+    blendCurrentWeekReference(dense, CURRENT, planByWeek.get(CURRENT));
+  }
+
   let prevKm: number | null = null;
   let prevType: WeekType | null = null;
 
@@ -546,7 +561,7 @@ function assertNeverFlagsYellowOrRed(actualAggregates: WeeklyAggregate[], races:
         priorCheckinsAsc: [],
         prevWeekKm: prevKm,
         prevWeekType: prevType,
-        weekInProgress: false,
+        weekInProgress: w.weekStart === CURRENT,
         reentry,
       },
       DEFAULTS,
@@ -623,5 +638,28 @@ describe('invariant: suggestPlan never generates a week flags() colours yellow o
       runsWeek: 3,
     }));
     assertNeverFlagsYellowOrRed(history, [], 16);
+  });
+
+  it('holds when the current week has only partially started relative to its own plan target (round 9 item 4)', () => {
+    // A steady history feeding a Build/Build/Build/Down cadence, then only
+    // 8km logged so far this week -- a single easy run, far short of the
+    // ~55km the plan actually calls for. The weeks after this one must
+    // still read green: they're a legitimate ramp from the plan's target,
+    // not from this week's still-accruing 8km.
+    assertNeverFlagsYellowOrRed(steadyHistory(9, 55), [], 16, 8);
+  });
+
+  it('holds through a taper into a race when the current week (mid-taper) is only partially done', () => {
+    const race: Race = {
+      id: 1,
+      name: 'Invariant partial-week 50k',
+      date: addWeeks(CURRENT, 2),
+      km: 50,
+      dplusM: 2200,
+      dminusM: 2200,
+      targetTimeMin: null,
+      priority: 'A',
+    };
+    assertNeverFlagsYellowOrRed(steadyHistory(10, 55), [race], 12, 5);
   });
 });

@@ -55,11 +55,16 @@ export function PlanWeekRow({
 }) {
   const dplusM = Math.max(0, (week.effortKmWeek - week.kmWeek) * 100);
   const chip = weekChipLabel(week, races);
+  // The plan's own target, never a blended-with-actual reference or a
+  // zeroed actual (v1.1 review round 9 item 1) -- falls back to the
+  // (unaffected, for a non-current week) reference figure when this week
+  // has no plan row of its own yet.
+  const plannedKm = week.plannedKm ?? week.kmWeek;
   // suggestPlan() clamps every generated week to green, peak weeks
   // included (v1.1 review round 6) -- when that clamp actually bit, this
   // is lower than the race's own peak target, worth calling out on the
   // row itself, not just on the race card.
-  const peakCapped = peakRace != null && week.kmWeek < peakRace.targets.peakWeekEffortKm - 0.5;
+  const peakCapped = peakRace != null && plannedKm < peakRace.targets.peakWeekEffortKm - 0.5;
 
   return (
     <button type="button" class="plan-row" onClick={onClick}>
@@ -71,12 +76,22 @@ export function PlanWeekRow({
           {week.userEdited && <span class="plan-row-edited">edited</span>}
         </div>
 
-        <MiniBar kmWeek={week.kmWeek} kmMax={week.corridor.kmMax} longestKm={week.longestKm} lrMax={week.corridor.lrMax} maxWeekKm={maxWeekKm} />
+        {isCurrent ? (
+          <MiniBar kmWeek={week.doneKmWeek} kmMax={week.corridor.kmMax} longestKm={week.doneLongestKm} lrMax={week.corridor.lrMax} maxWeekKm={maxWeekKm} />
+        ) : (
+          <MiniBar kmWeek={week.kmWeek} kmMax={week.corridor.kmMax} longestKm={week.longestKm} lrMax={week.corridor.lrMax} maxWeekKm={maxWeekKm} />
+        )}
 
-        {isCurrent && Number.isFinite(week.corridor.kmMax) ? (
+        {isCurrent ? (
           <div class="plan-row-numbers">
-            Target {fmtKm(week.corridor.kmMin)} to {fmtKm(week.corridor.kmMax)} km · LR {fmtKm(week.longestKm)} km · D+ {fmtM(dplusM)} m · D-{' '}
-            {fmtM(week.dminusWeek)} m
+            {Number.isFinite(week.corridor.kmMax) && (
+              <>
+                Target {fmtKm(week.corridor.kmMin)} to {fmtKm(week.corridor.kmMax)} km ·{' '}
+              </>
+            )}
+            done {fmtKm(week.doneKmWeek)} km · LR {fmtKm(week.doneLongestKm)} done / {fmtKm(week.plannedLongRunKm ?? 0)} planned km · D+{' '}
+            {fmtM(week.doneDplusM)} done / {fmtM(week.plannedDplusM ?? 0)} planned m · D- {fmtM(week.doneDminusWeek)} done /{' '}
+            {fmtM(week.plannedDminusM ?? 0)} planned m
           </div>
         ) : (
           <div class="plan-row-numbers">
@@ -86,7 +101,7 @@ export function PlanWeekRow({
 
         {peakCapped && (
           <div class="plan-row-capped">
-            Peak week capped at {fmtKm(week.kmWeek)} km (race target {fmtKm(peakRace!.targets.peakWeekEffortKm)} km)
+            Peak week capped at {fmtKm(plannedKm)} km (race target {fmtKm(peakRace!.targets.peakWeekEffortKm)} km)
           </div>
         )}
       </div>

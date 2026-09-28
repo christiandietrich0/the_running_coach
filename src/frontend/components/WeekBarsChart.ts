@@ -36,7 +36,7 @@ export function useWeekBarsChart({
     const plotCanvas = plotCanvasRef.current;
     if (!axisCanvas || !plotCanvas) return;
 
-    const rows = buildChartRows(weeks, metric, settings);
+    const rows = buildChartRows(weeks, metric, settings, currentWeekStart);
     const labels = rows.map((r) => fmtWeekLabel(r.weekStart));
 
     const muted = cssVar('--muted');
@@ -54,17 +54,14 @@ export function useWeekBarsChart({
     const rawMax = Math.max(10, ...rows.map((r) => r.value));
     const { max: topY, step } = niceScale(rawMax, 4);
 
-    // A bar is accent-coloured by default; it only turns yellow or red when
-    // that week is actually flagged, and violet on a race week regardless
-    // of its verdict (v1.1 round 8 redesign) -- the zone bands themselves
-    // are gone except for the single soft green band below. Past weeks are
-    // solid; a planned (not yet actual) week is a light tint of the same
-    // colour with a thin outline, not a hatch.
+    // Every bar is the same muted accent colour, race weeks in the race
+    // colour -- a flagged week no longer turns its bar yellow/red, it gets
+    // a small coloured dot above it instead (v1.1 review round 9 item 10),
+    // drawn by flagDots below. Past weeks are solid; a planned (not yet
+    // actual) week is a light tint of the same colour with a thin outline,
+    // not a hatch.
     function baseColor(r: (typeof rows)[number]): string {
-      if (r.isRace) return raceColor;
-      if (r.verdictColour === 'YELLOW') return yellow;
-      if (r.verdictColour === 'RED') return red;
-      return accent;
+      return r.isRace ? raceColor : accent;
     }
     const barBackgrounds = rows.map((r) => (r.isActual ? baseColor(r) : withAlpha(baseColor(r), 0.16)));
     const barBorders = rows.map((r) => baseColor(r));
@@ -145,8 +142,59 @@ export function useWeekBarsChart({
       },
     };
 
-    // Identical top padding and x-scale config on both instances, so their
-    // chart areas -- and therefore the y-tick pixel rows -- match. Only the
+    // A small dot above a flagged (yellow/red) week's bar, instead of
+    // colouring the bar itself (v1.1 review round 9 item 10) -- a race
+    // week keeps its own flag marker above and is skipped here.
+    const flagDots: Plugin<'bar'> = {
+      id: 'flagDots',
+      afterDraw(chart) {
+        const scale = chart.scales.x;
+        const yScale = chart.scales.y;
+        const { top } = chart.chartArea;
+        const ctx = chart.ctx;
+        rows.forEach((r, i) => {
+          if (r.isRace) return;
+          const dotColor = r.verdictColour === 'RED' ? red : r.verdictColour === 'YELLOW' ? yellow : null;
+          if (!dotColor) return;
+          const x = scale.getPixelForValue(i);
+          const y = Math.min(yScale.getPixelForValue(r.value), top) - 6;
+          ctx.save();
+          ctx.fillStyle = dotColor;
+          ctx.beginPath();
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+      },
+    };
+
+    // A thin row of single-letter week-type markers (B/P/T/R/Rec/H/D/L)
+    // right under the bars, in the layout's own bottom padding (v1.1
+    // review round 9 item 9) -- the current week's letter picks out in
+    // the accent colour, same as the axis highlighting below.
+    const typeLetterRow: Plugin<'bar'> = {
+      id: 'typeLetterRow',
+      afterDraw(chart) {
+        const scale = chart.scales.x;
+        const { bottom } = chart.chartArea;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.font = '600 9px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        rows.forEach((r, i) => {
+          const x = scale.getPixelForValue(i);
+          ctx.fillStyle = r.weekStart === currentWeekStart ? accent : muted;
+          ctx.fillText(r.typeLetter, x, bottom + 4);
+        });
+        ctx.restore();
+      },
+    };
+
+    // Identical top/bottom padding and x-scale config on both instances,
+    // so their chart areas -- and therefore the y-tick pixel rows -- match
+    // (the axis canvas doesn't draw the letter row itself, but still
+    // reserves the same bottom space so it doesn't need to). Only the
     // wide, scrollable plot canvas also gets left padding: it keeps the
     // very first week's x-axis label (in the overlay row below) from being
     // sliced by the scroll container's edge when there isn't 8 weeks of
@@ -155,13 +203,13 @@ export function useWeekBarsChart({
     // its already-tight tick numbers off its own right edge. Both plot
     // canvases (this row and the overlay row) need the *same* left value
     // to stay column-aligned with each other.
-    const sharedLayout = { padding: { top: 16 } };
-    const plotLayout = { padding: { top: 16, left: 12 } };
+    const sharedLayout = { padding: { top: 16, bottom: 14 } };
+    const plotLayout = { padding: { top: 16, bottom: 14, left: 12 } };
     const sharedX = { ticks: { display: false }, grid: { display: false }, border: { display: false } };
 
     const plotChart = new ChartJS(plotCanvas, {
       data: { labels, datasets },
-      plugins: [todayLine, raceFlags],
+      plugins: [todayLine, raceFlags, flagDots, typeLetterRow],
       options: {
         responsive: true,
         maintainAspectRatio: false,

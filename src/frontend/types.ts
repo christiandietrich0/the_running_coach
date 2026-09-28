@@ -50,6 +50,16 @@ export interface WeekState {
   runsWeek: number;
   longestKm: number;
   longestLossM: number;
+  doneKmWeek: number;
+  doneDminusWeek: number;
+  doneLongestKm: number;
+  doneLongestLossM: number;
+  doneDplusM: number;
+  doneEffortKmWeek: number;
+  plannedKm: number | null;
+  plannedLongRunKm: number | null;
+  plannedDplusM: number | null;
+  plannedDminusM: number | null;
   type: WeekType;
   symptomLocked: boolean;
   userEdited: boolean;

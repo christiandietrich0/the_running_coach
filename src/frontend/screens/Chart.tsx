@@ -53,13 +53,21 @@ export function Chart({ state }: { state: StateResponse }) {
   // Both rows' y-axis columns are sized to fit their own widest tick label
   // (descent-metres ticks like "2,000" need more room than km ticks do),
   // then the shared column takes the larger of the two so neither clips.
-  const rows = buildChartRows(weeks, metric, state.settings);
+  const rows = buildChartRows(weeks, metric, state.settings, state.currentWeekStart);
   const barsMax = niceScale(Math.max(10, ...rows.map((r) => r.value)), 4);
-  const overlayMax = niceScale(Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap))), 4);
+  const overlayMax = niceScale(Math.max(1, ...rows.map((r) => Math.max(r.overlayValue ?? 0, r.overlayCap))), 4);
   const axisWidth = Math.max(measureTickWidth(barsMax.max, barsMax.step, 11), measureTickWidth(overlayMax.max, overlayMax.step, 10));
 
   useWeekBarsChart({ weeks, metric, settings: state.settings, currentWeekStart: state.currentWeekStart, axisWidth, axisCanvasRef: barsAxisRef, plotCanvasRef: barsPlotRef });
-  useWeekOverlayChart({ weeks, metric, settings: state.settings, axisWidth, axisCanvasRef: overlayAxisRef, plotCanvasRef: overlayPlotRef });
+  useWeekOverlayChart({
+    weeks,
+    metric,
+    settings: state.settings,
+    currentWeekStart: state.currentWeekStart,
+    axisWidth,
+    axisCanvasRef: overlayAxisRef,
+    plotCanvasRef: overlayPlotRef,
+  });
 
   // Default scroll position centres today in the viewport, so the initial
   // view is ~8 weeks back and ~8 ahead -- re-run only when the actual date

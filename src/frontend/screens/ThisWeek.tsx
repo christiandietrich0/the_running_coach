@@ -58,14 +58,14 @@ export function ThisWeek({
           <WeekNumbers week={week} settings={state.settings} />
         </div>
 
+        <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
+
+        <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
+
         <div class="card">
           <div class="card-title">This week's runs</div>
           <RunsList runs={state.currentWeekRuns} />
         </div>
-
-        <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
-
-        <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
       </div>
     </PullToRefresh>
   );

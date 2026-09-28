@@ -15,6 +15,7 @@ export function useWeekOverlayChart({
   weeks,
   metric,
   settings,
+  currentWeekStart,
   axisWidth,
   axisCanvasRef,
   plotCanvasRef,
@@ -22,6 +23,7 @@ export function useWeekOverlayChart({
   weeks: WeekState[];
   metric: Metric;
   settings: Settings;
+  currentWeekStart: string;
   axisWidth: number;
   axisCanvasRef: RefObject<HTMLCanvasElement>;
   plotCanvasRef: RefObject<HTMLCanvasElement>;
@@ -32,8 +34,12 @@ export function useWeekOverlayChart({
     const plotCanvas = plotCanvasRef.current;
     if (!axisCanvas || !plotCanvas) return;
 
-    const rows = buildChartRows(weeks, metric, settings);
+    const rows = buildChartRows(weeks, metric, settings, currentWeekStart);
     const labels = rows.map((r) => fmtWeekLabel(r.weekStart));
+    // The stride counts from the current week's own index (not just from
+    // 0), so its forced-visible label always lands on the pattern instead
+    // of occasionally sitting right next to an already-shown neighbour.
+    const currentIdx = rows.findIndex((r) => r.weekStart === currentWeekStart);
 
     const fg = cssVar('--fg');
     const muted = cssVar('--muted');
@@ -42,7 +48,7 @@ export function useWeekOverlayChart({
     const accent = cssVar('--accent');
     const border = cssVar('--border');
 
-    const rawMax = Math.max(1, ...rows.map((r) => Math.max(r.overlayValue, r.overlayCap)));
+    const rawMax = Math.max(1, ...rows.map((r) => Math.max(r.overlayValue ?? 0, r.overlayCap)));
     const { max: topY, step } = niceScale(rawMax, 4);
 
     // Same top padding on both instances so their chart areas match. The
@@ -50,8 +56,16 @@ export function useWeekOverlayChart({
     // reserve the same bottom space as the plot's real date labels. Only
     // the wide, scrollable plot canvas gets left padding too (see
     // WeekBarsChart for why) -- both plot canvases need the same value.
-    const sharedLayout = { padding: { top: 4 } };
-    const plotLayout = { padding: { top: 4, left: 12 } };
+    //
+    // bottom: 20 is not cosmetic spacing -- the same narrow-region
+    // Chromium compositing bug documented on Y_AXIS_WIDTH in charts.ts
+    // also clips content sitting too close to a canvas's bottom edge (the
+    // canvas's own pixel buffer has the tick labels, confirmed via
+    // toDataURL, but the on-screen paint showed nothing there at all).
+    // This padding keeps the label band far enough from the true edge to
+    // avoid it (v1.1 review round 9 item 9).
+    const sharedLayout = { padding: { top: 4, bottom: 20 } };
+    const plotLayout = { padding: { top: 4, bottom: 20, left: 12 } };
     const xFont = { size: 10 };
 
     const plotChart = new ChartJS(plotCanvas, {
@@ -89,7 +103,28 @@ export function useWeekOverlayChart({
         layout: plotLayout,
         interaction: { mode: 'index', axis: 'x', intersect: false },
         scales: {
-          x: { ticks: { color: muted, autoSkip: true, maxRotation: 0, font: xFont }, grid: { display: false }, border: { display: false } },
+          x: {
+            ticks: {
+              // Every 2nd week's date, always including the current week
+              // regardless of its own parity, coloured to stand out from
+              // the rest (v1.1 review round 9 item 9) -- autoSkip's
+              // opportunistic thinning is replaced with this explicit
+              // stride so the pattern is stable while scrolling.
+              autoSkip: false,
+              maxRotation: 0,
+              font: xFont,
+              color: (ctx) => (rows[ctx.index]?.weekStart === currentWeekStart ? accent : muted),
+              callback: (_value, index) => {
+                const row = rows[index];
+                if (!row) return '';
+                const onStride = currentIdx === -1 ? index % 2 === 0 : (index - currentIdx) % 2 === 0;
+                if (row.weekStart === currentWeekStart || onStride) return fmtWeekLabel(row.weekStart);
+                return '';
+              },
+            },
+            grid: { display: false },
+            border: { display: false },
+          },
           y: {
             max: topY,
             ticks: { display: false },
@@ -104,7 +139,10 @@ export function useWeekOverlayChart({
         plugins: {
           legend: { display: false },
           tooltip: {
-            filter: (item) => item.dataset.label === 'overlay',
+            // No point is drawn for a not-yet-run current week (overlayValue
+            // is null, a gap -- v1.1 review round 9 item 5), so there's
+            // nothing to show a tooltip for either.
+            filter: (item) => item.dataset.label === 'overlay' && item.raw != null,
             backgroundColor: fg,
             titleColor: cardBg,
             bodyColor: cardBg,
@@ -117,7 +155,11 @@ export function useWeekOverlayChart({
                 const row = rows[item.dataIndex];
                 const unit = metric === 'dminus' ? 'm' : 'km';
                 const label = metric === 'dminus' ? 'Longest descent' : 'Long run';
-                return [`${label}: ${Math.round(row.overlayValue)} ${unit}`, `Cap: ${Math.round(row.overlayCap)} ${unit}`];
+                const lines = [`${label}: ${Math.round(row.overlayValue ?? 0)} ${unit}`, `Cap: ${Math.round(row.overlayCap)} ${unit}`];
+                // This week's own value was flagged red, so it didn't raise
+                // next week's cap (v1.1 review round 9 item 8).
+                if (row.notCountedAsReference) lines.push('Not counted as reference (flagged)');
+                return lines;
               },
             },
           },
@@ -153,5 +195,5 @@ export function useWeekOverlayChart({
       plotChart.destroy();
       axisChart.destroy();
     };
-  }, [weeks, metric, settings, axisWidth, axisCanvasRef, plotCanvasRef]);
+  }, [weeks, metric, settings, currentWeekStart, axisWidth, axisCanvasRef, plotCanvasRef]);
 }

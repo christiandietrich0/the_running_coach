@@ -23,13 +23,18 @@ export function PlanWeekEditForm({
   onReset: () => void;
   resetting: boolean;
 }) {
-  const initialDplusM = Math.round(Math.max(0, (week.effortKmWeek - week.kmWeek) * 100));
+  // Prefills from the plan's own stored target, never a reference blend
+  // or an actual (v1.1 review round 9 item 1) -- editing this week should
+  // start from what's currently planned. Falls back to the (unaffected,
+  // for a non-current week) reference figure when this week has no plan
+  // row of its own yet.
+  const initialDplusM = Math.round(week.plannedDplusM ?? Math.max(0, (week.effortKmWeek - week.kmWeek) * 100));
 
   const [type, setType] = useState(week.type);
-  const [km, setKm] = useState(String(Math.round(week.kmWeek)));
-  const [longRunKm, setLongRunKm] = useState(String(Math.round(week.longestKm)));
+  const [km, setKm] = useState(String(Math.round(week.plannedKm ?? week.kmWeek)));
+  const [longRunKm, setLongRunKm] = useState(String(Math.round(week.plannedLongRunKm ?? week.longestKm)));
   const [dplusM, setDplusM] = useState(String(initialDplusM));
-  const [dminusM, setDminusM] = useState(String(Math.round(week.dminusWeek)));
+  const [dminusM, setDminusM] = useState(String(Math.round(week.plannedDminusM ?? week.dminusWeek)));
   const [limitedDays, setLimitedDays] = useState(week.limitedDays != null ? String(week.limitedDays) : '');
   const [limitedKmCap, setLimitedKmCap] = useState(week.limitedKmCap != null ? String(week.limitedKmCap) : '');
 

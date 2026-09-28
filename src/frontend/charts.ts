@@ -7,7 +7,18 @@ export type Metric = 'km' | 'effortKm' | 'dminus';
 // canvas and its pinned axis-only canvas force their y-scale to this same
 // width via `afterFit`, so the two stay pixel-aligned regardless of how
 // wide the tick label text happens to be.
-export const Y_AXIS_WIDTH = 34;
+//
+// The floor is 60, not just "wide enough for the widest tick label": a
+// canvas narrower than ~50-60 CSS px reliably mis-composites its
+// right-aligned text in Chromium (confirmed in isolation with a bare
+// Chart.js instance, no app code involved -- the canvas's own pixel
+// buffer is correct via toDataURL, but the on-screen paint clips the
+// leading characters regardless of how much room the text actually
+// needs), which is what made every axis tick read as "0" for round
+// numbers like 0/50/100/150 (v1.1 round 9 item 2 -- round 8 misdiagnosed
+// the same symptom as a font-measurement mismatch and, separately, as a
+// screenshot-only artifact; neither was the real cause).
+export const Y_AXIS_WIDTH = 60;
 
 // Charts always set this explicitly on every tick font (both the real
 // axis-only canvas and the offscreen measurement in measureTickWidth
@@ -30,8 +41,35 @@ export interface ChartRow {
   b1: number;
   b2: number;
   b3: number;
-  overlayValue: number;
+  overlayValue: number | null;
   overlayCap: number;
+  // True when this week's own long run / single-run descent was flagged
+  // red and so didn't raise LR30/D30 for later weeks (v1.1 review round 9
+  // item 8) -- exactly the same red flag flags() independently computed
+  // for this week, since both use the same reference and the same red
+  // threshold.
+  notCountedAsReference: boolean;
+  // Single-letter week-type marker for the thin row under the bars chart
+  // (v1.1 review round 9 item 9).
+  typeLetter: string;
+}
+
+// A race's own Build-typed peak week reads "P", not "B" -- same
+// distinction weekChipLabel() in labels.ts draws for the chip text, just
+// condensed to a single letter here.
+const WEEK_TYPE_LETTER: Record<WeekType, string> = {
+  BUILD: 'B',
+  HOLD: 'H',
+  DOWN: 'D',
+  TAPER: 'T',
+  RACE: 'R',
+  LIMITED: 'L',
+  RECOVERY: 'Rec',
+};
+
+function weekTypeLetter(w: WeekState): string {
+  if (w.peakForRaceId != null) return 'P';
+  return WEEK_TYPE_LETTER[w.type];
 }
 
 // Colour-zone boundaries and the long-run/descent overlay, per metric.
@@ -39,9 +77,33 @@ export interface ChartRow {
 // there's no separate effort-km chronic reference, and the week's longest
 // run doesn't carry its own elevation gain in the state payload, only the
 // week's aggregate does.
-export function buildChartRows(weeks: WeekState[], metric: Metric, settings: Settings): ChartRow[] {
+export function buildChartRows(weeks: WeekState[], metric: Metric, settings: Settings, currentWeekStart: string): ChartRow[] {
   return weeks.map((w) => {
     const isRace = w.type === 'RACE';
+    const isCurrent = w.weekStart === currentWeekStart;
+    // The in-progress week's own kmWeek/effortKmWeek/dminusWeek/longestKm
+    // are blended up to the plan's target for reference purposes
+    // (references()/flags()/corridor() -- see blendCurrentWeekReference in
+    // src/worker/state.ts); the chart shows real progress instead, so it
+    // never draws this week's bar or long-run/descent dot as if the
+    // plan's target already happened (v1.1 review round 9 item 1).
+    const displayKmWeek = isCurrent ? w.doneKmWeek : w.kmWeek;
+    const displayEffortKmWeek = isCurrent ? w.doneEffortKmWeek : w.effortKmWeek;
+    const displayDminusWeek = isCurrent ? w.doneDminusWeek : w.dminusWeek;
+    const displayLongestKm = isCurrent ? w.doneLongestKm : w.longestKm;
+    const displayLongestLossM = isCurrent ? w.doneLongestLossM : w.longestLossM;
+    // No run logged yet this week: there's nothing to plot as a long run
+    // or single-run descent yet, so the overlay chart gets a gap here
+    // instead of a misleading dot at 0 (v1.1 review round 9 item 5).
+    const noRunYet = isCurrent && w.doneLongestKm <= 0;
+    // The same red flag flags() computed for this week's own long run or
+    // single-run descent is exactly "this didn't raise the reference"
+    // (v1.1 review round 9 item 8) -- no separate bookkeeping needed.
+    const notCountedAsReference =
+      metric === 'dminus'
+        ? w.flags.some((f) => f.kind === 'DESCENT_SINGLE' && f.colour === 'RED')
+        : w.flags.some((f) => f.kind === 'LONG_RUN' && f.colour === 'RED');
+
     const common = {
       weekStart: w.weekStart,
       isActual: w.isActual,
@@ -49,19 +111,21 @@ export function buildChartRows(weeks: WeekState[], metric: Metric, settings: Set
       raceName: w.raceName,
       type: w.type,
       verdictColour: w.verdict.colour,
-      longestKm: w.longestKm,
-      dminusWeek: w.dminusWeek,
+      longestKm: displayLongestKm,
+      dminusWeek: displayDminusWeek,
+      notCountedAsReference,
+      typeLetter: weekTypeLetter(w),
     };
 
     if (metric === 'dminus') {
       const dw4 = w.refs.DW4;
       return {
         ...common,
-        value: w.dminusWeek,
+        value: displayDminusWeek,
         b1: 0,
         b2: dw4 > 0 ? settings.weeklyDminusCapFactor * dw4 : 0,
         b3: dw4 > 0 ? settings.weeklyDminusRedFactor * dw4 : 0,
-        overlayValue: w.longestLossM,
+        overlayValue: noRunYet ? null : displayLongestLossM,
         overlayCap: w.refs.D30 > 0 ? settings.singleRunDminusCapFactor * w.refs.D30 : 0,
       };
     }
@@ -69,11 +133,11 @@ export function buildChartRows(weeks: WeekState[], metric: Metric, settings: Set
     const c = w.refs.C;
     return {
       ...common,
-      value: metric === 'km' ? w.kmWeek : w.effortKmWeek,
+      value: metric === 'km' ? displayKmWeek : displayEffortKmWeek,
       b1: c > 0 ? settings.ratioZoneEdges.lowVolume * c : 0,
       b2: c > 0 ? settings.ratioZoneEdges.greenMax * c : 0,
       b3: c > 0 ? settings.ratioZoneEdges.red * c : 0,
-      overlayValue: w.longestKm,
+      overlayValue: noRunYet ? null : displayLongestKm,
       overlayCap: w.refs.LR30 > 0 ? settings.longRunCapFactor * w.refs.LR30 : 0,
     };
   });

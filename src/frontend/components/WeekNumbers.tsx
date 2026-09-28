@@ -51,7 +51,16 @@ function Stat({ label, children }: { label: string; children: ComponentChildren 
 
 export function WeekNumbers({ week, settings }: { week: WeekState; settings: Settings }) {
   const [showDetails, setShowDetails] = useState(false);
-  const { kmWeek, longestKm, dminusWeek, longestLossM, corridor, refs } = week;
+  // Actual progress only, never the plan's target (v1.1 review round 9
+  // item 1) -- kmWeek/longestKm/dminusWeek/longestLossM on the current
+  // week are blended up to the plan's figure for reference purposes and
+  // would show as-if-done otherwise (the round 8 bug this component was
+  // already fixed for, reopened by that blend).
+  const kmWeek = week.doneKmWeek;
+  const longestKm = week.doneLongestKm;
+  const dminusWeek = week.doneDminusWeek;
+  const longestLossM = week.doneLongestLossM;
+  const { corridor, refs } = week;
   const lrCapped = Number.isFinite(corridor.lrMax);
   const dwCapped = Number.isFinite(corridor.dminusWeekMax);
   const drCapped = Number.isFinite(corridor.dminusRunMax);

@@ -21,14 +21,18 @@ export function RaceCard({
 }: {
   race: RaceState;
   today: string;
-  // The actual generated peak week's km for this race, looked up by the
-  // caller from state.weeks via peakForRaceId (v1.1 review round 6) -- the
-  // real, already-clamped number, not feasibility's own growth-rate
+  // The plan's own generated peak week's km for this race, looked up by
+  // the caller from state.weeks via peakForRaceId (v1.1 review round 6) --
+  // the real, already-clamped target, not feasibility's own growth-rate
   // estimate (which projects C forward at a fixed rate and can read more
   // optimistic than what suggestPlan() actually generates, since C is a
-  // rolling mean, not a value that jumps straight to a new level). Falls
-  // back to feasibility.maxReachableWeekKm only when no such week exists
-  // yet (e.g. the plan hasn't been regenerated since the race was added).
+  // rolling mean, not a value that jumps straight to a new level). The
+  // caller reads the week's *planned* figure specifically, never a
+  // reference blend or a not-yet-run actual, so a peak week that hasn't
+  // started yet never reads as "capped at 0" (v1.1 review round 9 item
+  // 1). Falls back to feasibility.maxReachableWeekKm only when no such
+  // week exists yet (e.g. the plan hasn't been regenerated since the race
+  // was added).
   peakWeekKm: number | null;
   // state.weeks keyed by weekStart, so the taper block can show each
   // taper week's actual generated km and date (v1.1 UI pass) instead of

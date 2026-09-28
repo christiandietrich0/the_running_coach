@@ -1,3 +1,4 @@
+import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { fetchState, putCheckin, runSync } from './api';
 import { CheckinSheet } from './components/CheckinSheet';
@@ -55,32 +56,39 @@ export function App() {
   }
 
   return (
-    <div class="app-root">
-      <div class="app-header">
-        <h1 class="app-title">Legroom</h1>
-        <p class="app-tagline">How much room your legs have this week.</p>
+    <Fragment>
+      {/* iOS standalone mode's status bar is translucent (apple-mobile-web-app-status-bar-style:
+          black-translucent), so scrolled content otherwise shows straight through behind the
+          clock/battery icons -- this pins a solid, blurred backdrop over just that inset so
+          scrolling content disappears behind it instead (v1.1 review round 9 item 7). */}
+      <div class="status-bar-scrim" />
+      <div class="app-root">
+        <div class={`app-header${screen === 'week' ? '' : ' app-header-compact'}`}>
+          <h1 class="app-title">Legroom</h1>
+          {screen === 'week' && <p class="app-tagline">How much room your legs have this week.</p>}
+        </div>
+        {error && (
+          <div class="card">
+            <p class="muted">Could not load your data: {error}</p>
+          </div>
+        )}
+        {!error && !state && (
+          <div class="card">
+            <p class="muted">Loading...</p>
+          </div>
+        )}
+        {state && (
+          <>
+            {screen === 'week' && <ThisWeek state={state} onOpenCheckin={() => setCheckinOpen(true)} onRefresh={handleRefresh} />}
+            {screen === 'chart' && <Chart state={state} />}
+            {screen === 'plan' && <Plan state={state} onStateChange={setState} />}
+            {screen === 'races' && <Races state={state} onStateChange={setState} />}
+            {screen === 'settings' && <Settings state={state} onStateChange={setState} />}
+            <TabBar active={screen} onChange={setScreen} />
+            {checkinOpen && <CheckinSheet onSave={handleSaveCheckin} onSkip={handleSkipCheckin} saving={checkinSaving} />}
+          </>
+        )}
       </div>
-      {error && (
-        <div class="card">
-          <p class="muted">Could not load your data: {error}</p>
-        </div>
-      )}
-      {!error && !state && (
-        <div class="card">
-          <p class="muted">Loading...</p>
-        </div>
-      )}
-      {state && (
-        <>
-          {screen === 'week' && <ThisWeek state={state} onOpenCheckin={() => setCheckinOpen(true)} onRefresh={handleRefresh} />}
-          {screen === 'chart' && <Chart state={state} />}
-          {screen === 'plan' && <Plan state={state} onStateChange={setState} />}
-          {screen === 'races' && <Races state={state} onStateChange={setState} />}
-          {screen === 'settings' && <Settings state={state} onStateChange={setState} />}
-          <TabBar active={screen} onChange={setScreen} />
-          {checkinOpen && <CheckinSheet onSave={handleSaveCheckin} onSkip={handleSkipCheckin} saving={checkinSaving} />}
-        </>
-      )}
-    </div>
+    </Fragment>
   );
 }

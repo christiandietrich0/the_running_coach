@@ -19,7 +19,7 @@ import {
   weeklyAggregates,
 } from '../logic';
 import { addDays, addWeeks, diffDays } from '../logic/dates';
-import type { CheckIn, Corridor, Feasibility, Flag, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
+import type { CheckIn, Corridor, Feasibility, Flag, PlanWeek, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
 import { getLastPlanUpdateAt, loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
 import type { Env } from './index';
@@ -40,27 +40,48 @@ function nextABRacePeakLR(races: Race[], weekStart: string, settings: Defaults):
   return upcoming ? raceTargets(upcoming, settings).peakLongRunKm : undefined;
 }
 
-// buildDenseTimeline() (src/logic/aggregate.ts) only prefers real data over
-// a plan row's own km/dminus/long-run figures when both already exist for
-// a week (the usual case once the current week has at least one logged
-// run) -- a brand-new week with a plan row but zero actual runs yet
-// otherwise falls through to the plan row's own numbers verbatim. That's
-// the right call for computing corridor/reference *targets*, but "This
-// Week" and the chart read this entry as what has actually happened so
-// far, and must not show the plan's target as if it were done. Mutates
-// the current week's entry back to zero/no-data in place, before
-// references()/flags()/verdict()/guidance in buildState() below ever see
-// it, so a fresh week with no logged runs reads as 0 done, not the plan's
-// km (v1.1 review round 8 item 1).
-export function suppressPlannedCurrentWeek(dense: TimelinePoint[], currentWeekStart: string, hasActualThisWeek: boolean): void {
-  if (hasActualThisWeek) return;
+// buildDenseTimeline() (src/logic/aggregate.ts) gives the current (in-
+// progress) week's entry EITHER pure actual data (once any run is logged
+// this week) OR the plan row's own figures verbatim (nothing logged yet)
+// -- never a blend of the two. Every consumer that treats this timeline
+// as "the week's reference value" -- references(), corridor(), flags(),
+// and the next week's own week-on-week comparison via prevKm in
+// buildState() below -- needs the week to count as at least its planned
+// target even while it's still accruing actuals: otherwise a
+// legitimately-planned next week reads as a huge jump over an
+// artificially low, still-in-progress current week and gets wrongly
+// flagged yellow/red (v1.1 review round 9 item 4 -- Oct 5's taper and
+// the following weeks were reading non-green off exactly this). Mutates
+// the current week's entry up to max(actual so far, planned target) per
+// field, in place, before references()/flags()/corridor() ever see it.
+//
+// This is deliberately a *reference* value, not a "done" one: buildState()
+// below captures the pure actual-so-far figures separately (from the same
+// weekly aggregate, before this runs) for anything that displays real
+// progress -- This Week's headline, the Plan row's "done" figures, the
+// remaining-this-week guidance math -- so the plan's target is never shown
+// as if it already happened (v1.1 review round 9 item 1; round 8's
+// suppressPlannedCurrentWeek zeroed the one shared field instead, which
+// fixed This Week but broke the Plan row and race card, which need the
+// planned figure, not zero).
+export function blendCurrentWeekReference(dense: TimelinePoint[], currentWeekStart: string, planned: PlanWeek | undefined): void {
+  if (!planned) return;
   const current = dense.find((w) => w.weekStart === currentWeekStart);
   if (!current) return;
-  current.kmWeek = 0;
-  current.dminusWeek = 0;
-  current.longRunKm = null;
-  current.longRunLossM = null;
-  current.longRunDate = null;
+
+  current.kmWeek = Math.max(current.kmWeek, planned.km ?? 0);
+  current.dminusWeek = Math.max(current.dminusWeek, planned.dminusM ?? 0);
+
+  const plannedLongRunKm = planned.longRunKm ?? 0;
+  if (plannedLongRunKm > (current.longRunKm ?? 0)) {
+    current.longRunKm = plannedLongRunKm;
+    // Planned weeks only ever carry a weekly D- total, not a per-run
+    // figure (buildDenseTimeline's own convention above for a planned
+    // week's longRunLossM); matched here so the pairing stays consistent
+    // when the planned long run is what wins.
+    current.longRunLossM = planned.dminusM ?? null;
+    current.longRunDate = currentWeekStart;
+  }
 }
 
 export interface WeekStateDTO {
@@ -73,6 +94,31 @@ export interface WeekStateDTO {
   runsWeek: number;
   longestKm: number;
   longestLossM: number;
+  // Actual progress logged so far this week, distinct from kmWeek/
+  // dminusWeek/longestKm/longestLossM above once those are blended up to
+  // the plan's target for reference purposes (blendCurrentWeekReference
+  // above, v1.1 review round 9 items 1 and 4). Only ever different from
+  // the fields above on the current (in-progress) week -- every other
+  // week's kmWeek etc. already *is* what actually happened (or, for a
+  // future week, the plan's own forecast, already labelled as such via
+  // isActual). Zero/0 when nothing's been logged yet, never the plan's
+  // number -- this is what This Week's headline and the Plan row's
+  // "done" figure must read instead of kmWeek etc.
+  doneKmWeek: number;
+  doneDminusWeek: number;
+  doneLongestKm: number;
+  doneLongestLossM: number;
+  doneDplusM: number;
+  doneEffortKmWeek: number;
+  // The plan's own raw target figures for this week, straight from its
+  // plan_weeks row -- null when no plan row exists yet for this week.
+  // Exposed so the Plan row can show "planned vs done" and the race card
+  // / peak-week-capped note always reads the plan's figure, never a
+  // zeroed or blended actual (v1.1 review round 9 item 1).
+  plannedKm: number | null;
+  plannedLongRunKm: number | null;
+  plannedDplusM: number | null;
+  plannedDminusM: number | null;
   type: WeekType;
   symptomLocked: boolean;
   userEdited: boolean;
@@ -175,7 +221,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const currentWeekStart = mondayOf(today);
   const dense = buildDenseTimeline(actualAggregates, planWeeks, currentWeekStart, addWeeks(currentWeekStart, CHART_LOOKAHEAD_WEEKS));
 
-  suppressPlannedCurrentWeek(dense, currentWeekStart, aggByWeek.has(currentWeekStart));
+  blendCurrentWeekReference(dense, currentWeekStart, planByWeek.get(currentWeekStart));
 
   // Days left in the current week, counting today (v1.1 review round 3
   // item 2): the last day of the week itself has exactly 1 remaining, not
@@ -190,6 +236,22 @@ export async function buildState(env: Env): Promise<StateResponse> {
   const weeks: WeekStateDTO[] = dense.map((w) => {
     const planRow = planByWeek.get(w.weekStart);
     const baseType: WeekType = planRow?.type ?? (w.isRaceWeek ? 'RACE' : 'BUILD');
+
+    // Pure actual-so-far figures, straight from this week's real
+    // aggregate (undefined when nothing's been logged this week at all)
+    // -- captured before any reference blending is read below, so guidance
+    // and the DTO's done* fields never see the plan's target as if it were
+    // done (v1.1 review round 9 items 1 and 4).
+    const agg = aggByWeek.get(w.weekStart);
+    const doneKmWeek = agg ? agg.kmWeek : 0;
+    const doneDminusWeek = agg ? agg.dminusWeek : 0;
+    const doneLongestKm = agg && agg.longestKm > 0 ? agg.longestKm : 0;
+    const doneLongestLossM = agg && agg.longestKm > 0 ? agg.longestLossM : 0;
+    const doneDplusM = agg ? (agg.effortKmWeek - agg.kmWeek) * 100 : 0;
+    const doneEffortKmWeek = agg ? agg.effortKmWeek : 0;
+    const effortKmWeek = agg ? agg.effortKmWeek : w.kmWeek + (planRow?.dplusM ?? 0) / 100;
+    const mechKmWeek = agg ? agg.mechKmWeek : w.kmWeek + (settings.descentWeightW * (planRow?.dminusM ?? 0)) / 100;
+    const runsWeek = agg ? agg.runsWeek : 0;
 
     const weekCheckin: CheckIn | null = checkinsAsc.find((c) => c.weekStart === w.weekStart) ?? null;
     const priorCheckinsAsc = checkinsAsc.filter((c) => c.weekStart < w.weekStart);
@@ -262,7 +324,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
         guidance = { rebuilding: true, targetMet: false, floorReachable: false, kmLeftMin: null, kmLeftMax: null };
       } else if (Number.isFinite(c.kmMax)) {
         const g = remainingWeekGuidance({
-          doneKm: w.kmWeek,
+          doneKm: doneKmWeek,
           C: refs.C,
           greenMinFactor: settings.ratioZoneEdges.greenMin,
           corridorKmMax: c.kmMax,
@@ -280,11 +342,6 @@ export async function buildState(env: Env): Promise<StateResponse> {
     const isUserLocked = !!planRow && (planRow.userEdited || planRow.type === 'LIMITED');
     const raceConflictType = isUserLocked && wantedType != null && wantedType !== planRow!.type ? wantedType : null;
 
-    const agg = aggByWeek.get(w.weekStart);
-    const effortKmWeek = agg ? agg.effortKmWeek : w.kmWeek + (planRow?.dplusM ?? 0) / 100;
-    const mechKmWeek = agg ? agg.mechKmWeek : w.kmWeek + (settings.descentWeightW * (planRow?.dminusM ?? 0)) / 100;
-    const runsWeek = agg ? agg.runsWeek : 0;
-
     return {
       weekStart: w.weekStart,
       isActual: w.weekStart < currentWeekStart,
@@ -295,6 +352,16 @@ export async function buildState(env: Env): Promise<StateResponse> {
       runsWeek,
       longestKm: w.longRunKm ?? 0,
       longestLossM: w.longRunLossM ?? 0,
+      doneKmWeek,
+      doneDminusWeek,
+      doneLongestKm,
+      doneLongestLossM,
+      doneDplusM,
+      doneEffortKmWeek,
+      plannedKm: planRow?.km ?? null,
+      plannedLongRunKm: planRow?.longRunKm ?? null,
+      plannedDplusM: planRow?.dplusM ?? null,
+      plannedDminusM: planRow?.dminusM ?? null,
       type: effectiveType,
       symptomLocked,
       userEdited: planRow?.userEdited ?? false,
