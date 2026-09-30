@@ -172,13 +172,19 @@ describe('references: LR30 / D30', () => {
 });
 
 // v1.1 review round 9 item 8: a run that so badly overshoots the current
-// reference that it's itself flagged red doesn't get to raise LR30/D30/
-// DW4 -- the reference stays frozen at the level before it until a
-// legitimate (non-red) run or week reaches or beats it. Otherwise a single
-// reckless outlier would instantly inflate next week's safety cap to
-// match itself.
-describe('references: red runs/weeks are frozen out of LR30/D30/DW4', () => {
-  it("a red descent run (1,299m vs a 303m max) doesn't raise D30 -- next week's single-run D- cap stays ~363m", () => {
+// reference gets *excluded* -- v1.1 review round 9 item 8 tried that and it
+// produced a runaway collapse: once anything got excluded, the reference
+// stayed at whatever low level it already had, which made the next
+// legitimate run look like an even bigger overshoot, which also got
+// excluded, forever (confirmed against the real backtest: LR30 got stuck
+// around 10km while actual long runs kept posting 15-90km, red nearly
+// every week). Instead, a run's contribution is clipped to capFactor x
+// the reference as it stood right before it -- never dropped, never a
+// hard freeze -- so the reference always closes the gap to reality by at
+// least one legitimate step per run, however extreme the outlier (v1.1
+// review round 9 follow-up: "clip, don't drop").
+describe('references: red runs/weeks are clipped, not dropped, in LR30/D30/DW4', () => {
+  it("a reckless descent run (1,299m vs a 303m max) counts as ~363m for D30, not 303 (frozen) or 1,299 (unclipped)", () => {
     const runs = mergeRuns([
       activity('baseline', '2026-07-01T08:00:00', 15000, 303),
       activity('reckless', '2026-07-08T08:00:00', 15000, 1299), // 1299/303 = 4.3x, well past the 1.5x red factor
@@ -186,11 +192,15 @@ describe('references: red runs/weeks are frozen out of LR30/D30/DW4', () => {
     const aggMap = weeklyAggregates(runs, DEFAULTS);
     const dense = buildDenseTimeline([...aggMap.values()], []);
 
-    // The reckless run's own week is independently flagged red by
-    // flags()'s DESCENT_SINGLE check, using exactly the reference (303m)
-    // that was current *before* it -- the same 303m that then stays frozen.
+    // The reckless run's own week already falls inside its own 30-day
+    // window (asOf is that week's Sunday, so a run earlier that same week
+    // is already "in"), so D30 here is already 303 clipped up to 363.6 by
+    // the reckless run's own (clipped) contribution -- not the raw 1,299m.
+    // flags()'s DESCENT_SINGLE check still reads this run as red: its raw
+    // longestLossM (1,299) is compared against that same clipped D30, and
+    // 1299/363.6 is still well past the red factor.
     const refsAsOfRecklessWeek = references({ weekStart: '2026-07-08', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refsAsOfRecklessWeek.D30).toBeCloseTo(303);
+    expect(refsAsOfRecklessWeek.D30).toBeCloseTo(363.6, 0);
     const selfFlags = flags(
       {
         weekType: 'BUILD',
@@ -208,37 +218,110 @@ describe('references: red runs/weeks are frozen out of LR30/D30/DW4', () => {
     );
     expect(selfFlags.some((f) => f.kind === 'DESCENT_SINGLE' && f.colour === 'RED')).toBe(true);
 
-    // The following week still sees D30 frozen at 303, not 1299.
+    // The following week sees D30 clipped to 1.2x303 = ~363.6m, not frozen
+    // at 303 and not raised all the way to the reckless run's raw 1,299m.
     const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refs.D30).toBeCloseTo(303);
+    expect(refs.D30).toBeCloseTo(363.6, 0);
 
     const c = corridor('BUILD', refs, DEFAULTS);
-    expect(c.dminusRunMax).toBeCloseTo(DEFAULTS.singleRunDminusCapFactor * 303, 0);
-    expect(c.dminusRunMax).toBeCloseTo(363.6, 0);
+    expect(c.dminusRunMax).toBeCloseTo(DEFAULTS.singleRunDminusCapFactor * refs.D30, 0);
   });
 
-  it('a green run above the old max legitimately raises D30', () => {
+  it('a run within the cap factor raises D30 to its own value, unclipped', () => {
     const runs = mergeRuns([
       activity('baseline', '2026-07-01T08:00:00', 15000, 303),
-      activity('bigger-but-safe', '2026-07-08T08:00:00', 15000, 400), // 400/303 = 1.32x, under the 1.5x red factor
+      activity('bigger-but-within-cap', '2026-07-08T08:00:00', 15000, 350), // 350/303 = 1.155x, under the 1.2x cap factor
     ]);
     const aggMap = weeklyAggregates(runs, DEFAULTS);
     const dense = buildDenseTimeline([...aggMap.values()], []);
     const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refs.D30).toBeCloseTo(400);
+    expect(refs.D30).toBeCloseTo(350);
   });
 
-  it('a red weekly descent total (DW4) stays frozen the same way', () => {
-    // computeDW4 tells an actual week from a planned one by whether its
-    // week-start has any real run in actualRuns -- these two weeks each
-    // get one, so they read as actual and stay subject to the freeze.
+  it('a run over the cap factor is clipped to exactly the cap, whatever the raw overshoot', () => {
+    const runs = mergeRuns([
+      activity('baseline', '2026-07-01T08:00:00', 15000, 303),
+      activity('over-cap', '2026-07-08T08:00:00', 15000, 400), // 400/303 = 1.32x, over the 1.2x cap factor
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+    const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refs.D30).toBeCloseTo(DEFAULTS.singleRunDminusCapFactor * 303, 0);
+  });
+
+  it('a red weekly descent total (DW4) is clipped the same way, not frozen', () => {
     const runs = mergeRuns([activity('w1', '2026-06-01T08:00:00', 15000, 0), activity('w2', '2026-06-08T08:00:00', 15000, 0)]);
     const dense: TimelinePoint[] = [
       week('2026-06-01', 50, { dminusWeek: 300, weekType: null }),
       week('2026-06-08', 50, { dminusWeek: 900, weekType: null }), // 900/300 = 3x, well past the 1.6x red factor
     ];
     const refs = references({ weekStart: '2026-06-15', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refs.DW4).toBeCloseTo(300);
+    expect(refs.DW4).toBeCloseTo(DEFAULTS.weeklyDminusCapFactor * 300); // 1.3 x 300 = 390, not frozen at 300
+  });
+
+  it('a run flagged red for descent still counts fully (up to the LR cap) toward LR30, and vice versa -- the two references are independent', () => {
+    const runs = mergeRuns([
+      activity('baseline', '2026-07-01T08:00:00', 10000, 100),
+      // A legitimate distance progression (10km -> 10.9km, within the 1.1x LR cap) that also happens
+      // to be recklessly steep (100m -> 1000m loss, 10x over the 1.2x D cap): the descent side should
+      // clip hard, but the distance side must not be dragged down by it.
+      activity('steep-but-reasonable-distance', '2026-07-08T08:00:00', 10900, 1000),
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+    const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refs.LR30).toBeCloseTo(10.9); // fully counted, well under the 1.1x11=11km cap
+    expect(refs.D30).toBeCloseTo(DEFAULTS.singleRunDminusCapFactor * 100, 0); // clipped to 1.2x100=120, not 1000
+  });
+
+  it("doesn't cascade: a reckless spike doesn't permanently suppress the reference, and never retroactively changes an earlier week's verdict", () => {
+    // Three widening long runs after a small baseline: each one is a huge
+    // jump, so each is individually clipped -- but the reference must keep
+    // climbing (never get stuck at the same value run after run), and an
+    // earlier week's own verdict must be unaffected by later runs it never saw.
+    const runs = mergeRuns([
+      activity('baseline', '2026-06-01T08:00:00', 10000, 0),
+      activity('spike1', '2026-06-08T08:00:00', 50000, 0),
+      activity('spike2', '2026-06-15T08:00:00', 50000, 0),
+      activity('spike3', '2026-06-22T08:00:00', 50000, 0),
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+
+    const lr30AfterSpike1 = references({ weekStart: '2026-06-08', denseTimeline: dense, actualRuns: runs }, DEFAULTS).LR30;
+    const lr30AfterSpike2 = references({ weekStart: '2026-06-15', denseTimeline: dense, actualRuns: runs }, DEFAULTS).LR30;
+    const lr30AfterSpike3 = references({ weekStart: '2026-06-22', denseTimeline: dense, actualRuns: runs }, DEFAULTS).LR30;
+    // Each spike's own week already falls inside its own 30-day window
+    // (asOf is that week's Sunday), so its own clipped contribution is
+    // already folded in by the time we read that week's LR30: baseline 10
+    // clips spike1 to 11 (1.1x10), which clips spike2 to 12.1 (1.1x11),
+    // which clips spike3 to 13.31 (1.1x12.1) -- strictly increasing, never
+    // stuck at the same value run after run.
+    expect(lr30AfterSpike1).toBeCloseTo(11);
+    expect(lr30AfterSpike2).toBeGreaterThan(lr30AfterSpike1);
+    expect(lr30AfterSpike3).toBeGreaterThan(lr30AfterSpike2);
+
+    // The baseline week's own flags/verdict, computed before spike2/spike3
+    // existed at all, must read identically once they're added to the
+    // dataset -- references() only ever looks backward from a given week.
+    const refsForBaselineEarly = references({ weekStart: '2026-06-01', denseTimeline: dense, actualRuns: [runs[0]] }, DEFAULTS);
+    const refsForBaselineLate = references({ weekStart: '2026-06-01', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refsForBaselineLate).toEqual(refsForBaselineEarly);
+  });
+
+  it('never returns a reference below the largest clipped contribution in the window', () => {
+    const runs = mergeRuns([
+      activity('a', '2026-07-01T08:00:00', 20000, 0),
+      activity('b', '2026-07-05T08:00:00', 15000, 0), // smaller than 'a', must not pull LR30 down
+      activity('c', '2026-07-10T08:00:00', 18000, 0),
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+    const refs = references({ weekStart: '2026-07-13', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    // 'a' (20km) is the first point (unclipped bootstrap); 'b' and 'c' are
+    // both smaller and never exceed 'a's own clip ceiling, so the max
+    // clipped contribution across the window is 'a' itself, 20km.
+    expect(refs.LR30).toBeCloseTo(20);
   });
 });
 

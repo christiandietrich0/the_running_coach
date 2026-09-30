@@ -83,16 +83,21 @@ export function PlanWeekRow({
         )}
 
         {isCurrent ? (
-          <div class="plan-row-numbers">
-            {Number.isFinite(week.corridor.kmMax) && (
-              <>
-                Target {fmtKm(week.corridor.kmMin)} to {fmtKm(week.corridor.kmMax)} km ·{' '}
-              </>
-            )}
-            done {fmtKm(week.doneKmWeek)} km · LR {fmtKm(week.doneLongestKm)} done / {fmtKm(week.plannedLongRunKm ?? 0)} planned km · D+{' '}
-            {fmtM(week.doneDplusM)} done / {fmtM(week.plannedDplusM ?? 0)} planned m · D- {fmtM(week.doneDminusWeek)} done /{' '}
-            {fmtM(week.plannedDminusM ?? 0)} planned m
-          </div>
+          <>
+            <div class="plan-row-numbers">
+              Done {fmtKm(week.doneKmWeek)} km · LR {fmtKm(week.doneLongestKm)} km · D- {fmtM(week.doneDminusWeek)} m
+            </div>
+            <div class="plan-row-numbers plan-row-numbers-plan">
+              {Number.isFinite(week.corridor.kmMax) ? (
+                <>
+                  Plan {fmtKm(week.corridor.kmMin)} to {fmtKm(week.corridor.kmMax)} km
+                </>
+              ) : (
+                <>Plan {fmtKm(plannedKm)} km</>
+              )}{' '}
+              · LR {fmtKm(week.plannedLongRunKm ?? 0)} km · D- {fmtM(week.plannedDminusM ?? 0)} m
+            </div>
+          </>
         ) : (
           <div class="plan-row-numbers">
             LR {fmtKm(week.longestKm)} km · D+ {fmtM(dplusM)} m · D- {fmtM(week.dminusWeek)} m

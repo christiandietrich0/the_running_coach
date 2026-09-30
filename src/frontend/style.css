@@ -651,7 +651,7 @@ body {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
 }
 
 .chart-scroll {
@@ -667,7 +667,7 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
 }
 
 .chart-wrap {
@@ -982,6 +982,13 @@ body {
   color: var(--muted);
   font-size: 0.85rem;
   margin-top: 4px;
+}
+
+/* Current week's plan-row gets two separate lines -- done, then planned --
+   never blended into one (v1.1 review round 10 item 4): the second line
+   sits close under the first instead of getting its own full margin-top. */
+.plan-row-numbers-plan {
+  margin-top: 2px;
 }
 
 .plan-row-target {

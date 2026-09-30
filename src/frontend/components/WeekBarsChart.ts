@@ -112,7 +112,11 @@ export function useWeekBarsChart({
         ctx.fillStyle = accent;
         ctx.font = '600 9px -apple-system, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Today', x, top - 4);
+        // Clear of flagDots' own band (top - 9 to top - 3, see below): the
+        // label sits a further row up instead of right on top of a dot
+        // that happens to land next to the today-line (v1.1 review round
+        // 10 item 5).
+        ctx.fillText('Today', x, top - 11);
         ctx.restore();
       },
     };
@@ -203,8 +207,14 @@ export function useWeekBarsChart({
     // its already-tight tick numbers off its own right edge. Both plot
     // canvases (this row and the overlay row) need the *same* left value
     // to stay column-aligned with each other.
-    const sharedLayout = { padding: { top: 16, bottom: 14 } };
-    const plotLayout = { padding: { top: 16, bottom: 14, left: 12 } };
+    //
+    // bottom: 20 (not 14) -- the type-letter row's own text was being cut
+    // off against the old, tighter padding, which then read as colliding
+    // with the overlay row's title/axis tick right underneath it (v1.1
+    // review round 10 item 5). top: 22 gives the "Today" label (now drawn
+    // further up, see todayLine) room of its own above flagDots' band.
+    const sharedLayout = { padding: { top: 22, bottom: 20 } };
+    const plotLayout = { padding: { top: 22, bottom: 20, left: 12 } };
     const sharedX = { ticks: { display: false }, grid: { display: false }, border: { display: false } };
 
     const plotChart = new ChartJS(plotCanvas, {

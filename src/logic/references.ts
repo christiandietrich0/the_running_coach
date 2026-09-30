@@ -49,30 +49,66 @@ export function isReentryWeek(dense: TimelinePoint[], weekStart: string): boolea
   return false;
 }
 
-// DW4: the largest weekly D- of the previous `windowWeeks` weeks (3.5),
-// but an *actual* week whose own D- so badly overshot the then-current DW4
-// that it would itself be flagged red doesn't get to raise the reference
-// -- it stays frozen at the level before that week until a legitimate
-// (non-red) week reaches or beats it (v1.1 review round 9 item 8). A
-// planned/forecast week (no actual runs of its own) is exempt: suggestPlan
-// already vets its own generated trajectory (the invariant tests in
-// plan.test.ts hold it to never itself read yellow/red), so a deliberate
-// plan target -- e.g. a peak week's heavier descent than the Build weeks
-// before it -- isn't second-guessed here. No race-week skipping is
-// specified for this one, unlike C.
-function computeDW4(dense: TimelinePoint[], idx: number, windowWeeks: number, redFactor: number, actualWeekStarts: Set<string>): number {
-  const inWindow: { value: number; isPlanned: boolean }[] = [];
-  for (let i = idx - 1, count = 0; i >= 0 && count < windowWeeks; i--, count++) {
-    inWindow.push({ value: dense[i].dminusWeek, isPlanned: !actualWeekStarts.has(dense[i].weekStart) });
-  }
-  inWindow.reverse(); // oldest first, so escalation is judged in the order it actually happened
+// A run/week that so badly overshoots the then-current reference that it
+// would itself be flagged doesn't get *excluded* from that reference --
+// dropping it entirely was tried in v1.1 review round 9 item 8 and
+// produced a runaway collapse: once anything got excluded, the reference
+// stayed at whatever low level it was already at, which made the *next*
+// legitimate run look like an even bigger overshoot, which also got
+// excluded, forever. Excluding nothing ever raised the reference again
+// (v1.1 review round 9 follow-up).
+//
+// Instead the run still counts, clipped to capFactor x the reference as
+// it stood right before this point: strictly bounded growth per step
+// (the same ceiling corridor()'s own cap formula already uses, e.g.
+// 1.10x LR30 for the long run), but never a hard freeze -- a big outlier
+// always pushes the reference up by exactly one legitimate step, and a
+// few real weeks in a row close the gap to reality instead of the
+// reference staying stuck at its own bootstrap value indefinitely. No
+// baseline yet (runningMax <= 0) means there's nothing to clip against,
+// so the very first point in a window sets it unclipped, same as
+// ratioOrNull's null-ref case in flags.ts.
+function clippedContribution(value: number, runningMax: number, capFactor: number): number {
+  if (runningMax <= 0) return value;
+  return Math.min(value, capFactor * runningMax);
+}
 
+// DW4: the largest weekly D- of the previous `windowWeeks` weeks (3.5),
+// with an *actual* week's own D- clipped to capFactor x the reference as
+// it stood before that week (see clippedContribution above). A planned/
+// forecast week (no actual runs of its own) is exempt from clipping:
+// suggestPlan already vets its own generated trajectory (the invariant
+// tests in plan.test.ts hold it to never itself read yellow/red), so a
+// deliberate plan target -- e.g. a peak week's heavier descent than the
+// Build weeks before it -- isn't second-guessed here. No race-week
+// skipping is specified for this one, unlike C.
+//
+// Each week's own clipped contribution is computed by walking the *whole*
+// history from week 0 up to (not including) idx, not just the last
+// `windowWeeks` weeks: re-bootstrapping runningMax at 0 from whatever
+// happens to be the oldest week still inside a short, moving window made
+// a fixed week's own clipped value silently change from one query to the
+// next as that boundary slid past older weeks (a real spike found via the
+// backtest script: LR30 35.0 -> 18.8 -> 28.9 across three consecutive
+// weeks, though the run that set 35.0 was still only days old and nowhere
+// near ageing out of its 30-day window). Walking from the true start
+// means a given week's own contribution is a stable property of the
+// history up to it, and DW4 can only fall when the week that set it
+// actually leaves the trailing `windowWeeks` window -- never as an
+// artefact of recomputing the clip chain fresh each time (v1.1 review
+// round 10 item 6).
+function computeDW4(dense: TimelinePoint[], idx: number, windowWeeks: number, capFactor: number, actualWeekStarts: Set<string>): number {
   let runningMax = 0;
-  for (const { value, isPlanned } of inWindow) {
-    if (!isPlanned && runningMax > 0 && value > redFactor * runningMax) continue; // red -- frozen, doesn't raise the reference
-    if (value > runningMax) runningMax = value;
+  const contributions: number[] = [];
+  for (let i = 0; i < idx; i++) {
+    const isPlanned = !actualWeekStarts.has(dense[i].weekStart);
+    const contribution = isPlanned ? dense[i].dminusWeek : clippedContribution(dense[i].dminusWeek, runningMax, capFactor);
+    if (contribution > runningMax) runningMax = contribution;
+    contributions.push(contribution);
   }
-  return runningMax;
+
+  const windowContribs = contributions.slice(Math.max(0, idx - windowWeeks), idx);
+  return windowContribs.length > 0 ? Math.max(...windowContribs) : 0;
 }
 
 // M12: 12-week mean of km_week, used only for the detraining check (3.6).
@@ -143,26 +179,44 @@ function longRunPoints(dense: TimelinePoint[], actualRuns: Run[]): LongRunPoint[
 // conservative, so a long run that's about to age out of the 30-day
 // window by the time this week is actually run has already dropped out.
 //
-// Processed oldest-first so escalation is judged in the order it actually
-// happened: an actual run that so badly overshot the *then-current*
-// reference that it would itself be flagged red doesn't get to raise
-// LR30/D30 -- the reference stays frozen at the level before that run
-// until a legitimate (non-red) run reaches or beats it (v1.1 review round
-// 9 item 8). redFactor is the same ratio-to-reference threshold
-// longRunFlag/descentSingleFlag treat as red, so a run excluded here is
-// exactly the one flags() would independently also flag red for that same
-// week.
-function maxInWindow(points: LongRunPoint[], asOf: string, windowDays: number, pick: (p: LongRunPoint) => number, redFactor: number): number {
+// Every point's own clipped contribution is computed by walking the
+// *entire* history up to `asOf`, not just the 30-day window: re-bootstrapping
+// runningMax at 0 from whatever happens to be the oldest point still inside
+// a short, moving window made a single fixed run's own clipped value
+// silently drift from one week's query to the next, as the window's start
+// boundary slid past older points and changed which one got to be the
+// unclipped "first" point -- confirmed via the backtest script as a real
+// spike-then-crash (LR30 35.0 -> 18.8 -> 28.9 across three consecutive
+// weeks, days apart, with the run that set 35.0 nowhere near ageing out of
+// its own 30-day window). Walking from the true start of history means a
+// given point's own contribution is a stable property of everything before
+// it, and the window is only used at the very end, to pick the largest
+// *already-fixed* contribution among points still within it -- so LR30/D30
+// can only fall when the point that set them actually leaves the 30-day
+// window, never as an artefact of recomputing the clip chain fresh each
+// time (v1.1 review round 10 item 6). Processed oldest-first so growth is
+// judged in the order it actually happened: an actual run's contribution is
+// clipped to capFactor x the reference as it stood right before it (see
+// clippedContribution above), never excluded outright. capFactor is the
+// same cap-ratio threshold corridor()'s own formula uses (e.g.
+// longRunCapFactor, 1.10x LR30) -- not the red threshold, which is
+// deliberately higher and would let a single reckless run inflate the
+// reference by too much in one step.
+function maxInWindow(points: LongRunPoint[], asOf: string, windowDays: number, pick: (p: LongRunPoint) => number, capFactor: number): number {
   const windowStart = addDays(asOf, -windowDays);
-  const inWindow = points.filter((p) => p.date >= windowStart && p.date < asOf).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const sorted = points.filter((p) => p.date < asOf).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   let runningMax = 0;
-  for (const p of inWindow) {
+  const contributions: { date: string; value: number }[] = [];
+  for (const p of sorted) {
     const v = pick(p);
-    if (!p.isPlanned && runningMax > 0 && v > redFactor * runningMax) continue; // red -- frozen, doesn't raise the reference
-    if (v > runningMax) runningMax = v;
+    const contribution = p.isPlanned ? v : clippedContribution(v, runningMax, capFactor);
+    if (contribution > runningMax) runningMax = contribution;
+    contributions.push({ date: p.date, value: contribution });
   }
-  return runningMax;
+
+  const windowContribs = contributions.filter((c) => c.date >= windowStart);
+  return windowContribs.length > 0 ? Math.max(...windowContribs.map((c) => c.value)) : 0;
 }
 
 export interface ReferencesInput {
@@ -181,7 +235,7 @@ export function references(input: ReferencesInput, settings: Settings): Referenc
   const actualWeekStarts = new Set(actualRuns.map((r) => mondayOf(r.startLocal)));
 
   const { C, weeksUsed } = computeC(denseTimeline, idx, settings.chronicWindowWeeks);
-  const DW4 = computeDW4(denseTimeline, idx, settings.chronicWindowWeeks, settings.weeklyDminusRedFactor, actualWeekStarts);
+  const DW4 = computeDW4(denseTimeline, idx, settings.chronicWindowWeeks, settings.weeklyDminusCapFactor, actualWeekStarts);
   const M12 = computeM12(denseTimeline, idx, 12);
   const buildMean = computeBuildMean(denseTimeline, idx, settings.downCadenceBuildWeeks);
 
@@ -193,7 +247,7 @@ export function references(input: ReferencesInput, settings: Settings): Referenc
   const asOf = addDays(weekStart, 6);
   const points = longRunPoints(denseTimeline, actualRuns);
   const LR30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.km, settings.longRunCapFactor);
-  const D30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.lossM, settings.singleRunDminusRedFactor);
+  const D30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.lossM, settings.singleRunDminusCapFactor);
 
   return { C, LR30, D30, DW4, M12, buildMean, weeksUsedForC: weeksUsed };
 }

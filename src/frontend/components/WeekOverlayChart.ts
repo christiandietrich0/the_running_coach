@@ -64,8 +64,15 @@ export function useWeekOverlayChart({
     // toDataURL, but the on-screen paint showed nothing there at all).
     // This padding keeps the label band far enough from the true edge to
     // avoid it (v1.1 review round 9 item 9).
-    const sharedLayout = { padding: { top: 4, bottom: 20 } };
-    const plotLayout = { padding: { top: 4, bottom: 20, left: 12 } };
+    //
+    // top: 14 (not 4) -- the old, tighter value put this chart's own top
+    // gridline right under the "Long run vs cap" title pill (chart-row-title
+    // in style.css), which itself sits right under the bars row's
+    // type-letter row with almost no gap: all three read as one collided
+    // mess. This gives the title -- and the bars row's letters above it --
+    // room to breathe (v1.1 review round 10 item 5).
+    const sharedLayout = { padding: { top: 14, bottom: 20 } };
+    const plotLayout = { padding: { top: 14, bottom: 20, left: 12 } };
     const xFont = { size: 10 };
 
     const plotChart = new ChartJS(plotCanvas, {
