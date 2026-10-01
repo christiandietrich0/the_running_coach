@@ -58,7 +58,7 @@ export function Chart({ state }: { state: StateResponse }) {
   const overlayMax = niceScale(Math.max(1, ...rows.map((r) => Math.max(r.overlayValue ?? 0, r.overlayCap))), 4);
   const axisWidth = Math.max(measureTickWidth(barsMax.max, barsMax.step, 11), measureTickWidth(overlayMax.max, overlayMax.step, 10));
 
-  useWeekBarsChart({ weeks, metric, settings: state.settings, currentWeekStart: state.currentWeekStart, axisWidth, axisCanvasRef: barsAxisRef, plotCanvasRef: barsPlotRef });
+  useWeekBarsChart({ weeks, races: state.races, metric, settings: state.settings, currentWeekStart: state.currentWeekStart, axisWidth, axisCanvasRef: barsAxisRef, plotCanvasRef: barsPlotRef });
   useWeekOverlayChart({
     weeks,
     metric,

@@ -2,8 +2,8 @@ import { Chart as ChartJS, type Plugin } from 'chart.js';
 import type { RefObject } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { AXIS_FONT_FAMILY, buildChartRows, cssVar, ensureChartRegistered, fmtWeekLabel, niceScale, withAlpha, type Metric } from '../charts';
-import { FLAG_COLOUR_LABEL, WEEK_TYPE_LABEL } from '../labels';
-import type { Settings, WeekState } from '../types';
+import { FLAG_COLOUR_LABEL, weekChipLabel } from '../labels';
+import type { RaceState, Settings, WeekState } from '../types';
 
 // Top row of the two-chart split (v1.1 mobile polish, calmed down in the
 // v1.1 round 8 chart redesign): the metric's weekly bars, a single soft
@@ -15,6 +15,7 @@ import type { Settings, WeekState } from '../types';
 // tick rows land on the same pixel.
 export function useWeekBarsChart({
   weeks,
+  races,
   metric,
   settings,
   currentWeekStart,
@@ -23,6 +24,7 @@ export function useWeekBarsChart({
   plotCanvasRef,
 }: {
   weeks: WeekState[];
+  races: RaceState[];
   metric: Metric;
   settings: Settings;
   currentWeekStart: string;
@@ -258,14 +260,23 @@ export function useWeekBarsChart({
               title: (items) => fmtWeekLabel(rows[items[0].dataIndex].weekStart),
               label: (item) => {
                 const row = rows[item.dataIndex];
+                const week = weeks[item.dataIndex];
                 const unit = metric === 'dminus' ? 'm' : 'km';
-                // A week that has started already has real (if still partial)
-                // numbers, not a forecast -- so it reads "done" as soon as
-                // it's the current week or earlier, not just once isActual
-                // (strictly before this week) flips true (v1.1 polish).
-                const started = row.weekStart <= currentWeekStart;
-                const lines = [`${WEEK_TYPE_LABEL[row.type]}${started ? ' (done)' : ' (planned)'}`];
-                if (row.isRace && row.raceName) lines.push(row.raceName);
+                // The week-type label matches weekChipLabel() -- the same
+                // one the Plan/This Week chip uses -- instead of the plain
+                // type name, so a Peak week or "Taper week N of M" reads
+                // the same way here as everywhere else in the app (v1.1
+                // review round 10 follow-up item 4). A week that has
+                // started already has real (if still partial) numbers, not
+                // a forecast -- so it reads "in progress" for the current
+                // week specifically, "done" once it's strictly in the
+                // past, and "planned" for a future week (v1.1 polish,
+                // corrected round 10 follow-up: the current week was
+                // wrongly lumped in with "done").
+                const chip = weekChipLabel(week, races);
+                const isCurrent = row.weekStart === currentWeekStart;
+                const statusLabel = chip.isRace ? '' : isCurrent ? ' (in progress)' : row.weekStart < currentWeekStart ? ' (done)' : ' (planned)';
+                const lines = [`${chip.text}${statusLabel}`];
                 lines.push(`${Math.round(row.value)} ${unit}`);
                 if (metric !== 'dminus') lines.push(`LR ${Math.round(row.longestKm)} km`);
                 lines.push(`D- ${Math.round(row.dminusWeek)} m`);
@@ -306,5 +317,5 @@ export function useWeekBarsChart({
       plotChart.destroy();
       axisChart.destroy();
     };
-  }, [weeks, metric, settings, currentWeekStart, axisWidth, axisCanvasRef, plotCanvasRef]);
+  }, [weeks, races, metric, settings, currentWeekStart, axisWidth, axisCanvasRef, plotCanvasRef]);
 }
