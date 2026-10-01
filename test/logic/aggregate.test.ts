@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDenseTimeline, mergeRuns, weeklyAggregates } from '../../src/logic/aggregate';
+import { buildDenseTimeline, longRunDescentShare, mergeRuns, weeklyAggregates } from '../../src/logic/aggregate';
 import { DEFAULTS } from '../../src/worker/defaults';
 import type { PlanWeek, RawActivity, WeeklyAggregate } from '../../src/logic/types';
 
@@ -130,6 +130,10 @@ describe('buildDenseTimeline', () => {
     expect(plannedPoint.weekType).toBe('BUILD');
     expect(plannedPoint.longRunKm).toBe(33);
     expect(plannedPoint.longRunDate).toBe('2026-07-27');
+    // The long run's own share of the week's D- (650 x 33/65), not the
+    // whole week's total credited to a single run (v1.1 review round 10
+    // follow-up item 1).
+    expect(plannedPoint.longRunLossM).toBeCloseTo(650 * (33 / 65));
   });
 
   it('keeps the race distance as the long-run point for a planned RACE week', () => {
@@ -154,5 +158,32 @@ describe('buildDenseTimeline', () => {
     expect(week.kmWeek).toBe(50); // the real number, not the plan's 74
     expect(week.longRunKm).toBe(25); // actual's longest run, not the plan's 53
     expect(week.weekType).toBe('DOWN'); // but the plan's type is still recorded
+  });
+});
+
+// v1.1 review round 10 follow-up item 1: a live Peak week (planned 64-71km,
+// long run 35km, weekly D- 703m) read "Single-run descent 703m is 93% over
+// your 30-day max (363m)" -- 703m is the *whole week's* planned descent,
+// not what the 35km long run alone would do. Crediting the whole week to
+// one run inflated both the current week's own DESCENT_SINGLE flag (via
+// state.ts reading longRunLossM for its own, still-in-progress week) and,
+// for any week further out, D30 itself (a planned point's contribution is
+// never clipped -- references.ts's longRunPoints()/maxInWindow()).
+describe('longRunDescentShare', () => {
+  it("estimates the long run's own share of the week's D-, proportional to its share of the week's distance", () => {
+    // The reported Peak week: 67.5km planned (midpoint of 64-71), 35km long
+    // run, 703m weekly D-. The long run is only ~52% of the week's
+    // distance, so only ~52% of the week's D- is its own.
+    expect(longRunDescentShare(703, 35, 67.5)).toBeCloseTo(703 * (35 / 67.5));
+    expect(longRunDescentShare(703, 35, 67.5)).toBeLessThan(400); // comfortably under the real ~436m single-run cap
+  });
+
+  it('returns the full value when the long run is the whole week (e.g. a race week)', () => {
+    expect(longRunDescentShare(1000, 42, 42)).toBe(1000);
+  });
+
+  it('falls back to the full value for a 0km week rather than dividing by zero', () => {
+    expect(longRunDescentShare(500, 0, 0)).toBe(500);
+    expect(Number.isFinite(longRunDescentShare(500, 0, 0))).toBe(true);
   });
 });

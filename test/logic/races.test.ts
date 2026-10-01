@@ -99,19 +99,27 @@ describe('feasibility', () => {
 describe('feasibility: Tight-vs-Not-reachable long-run rescue at settings.feasibilityTightReachableFactor (80%)', () => {
   // Same 60km B race as above: peak_long_run = 27km, 2 taper weeks.
   const r = race({ priority: 'B', km: 60, dplusM: 0 });
+  // These tests deliberately use a budget-0 (weeksAvailable == taper weeks)
+  // scenario so the reachable long run stays at the raw baseline, the
+  // simplest case to hand-verify the rescue threshold against. Since no
+  // race's taper ever exceeds 3 weeks, budget-0 always falls inside the
+  // new LOCKED_IN window (v1.1 review round 10 follow-up item 4) -- these
+  // pass feasibilityLockedInWeeks: 0 to test the rescue math itself in
+  // isolation from that (separately tested below) override.
+  const NOT_LOCKED_IN = { ...DEFAULTS, feasibilityLockedInWeeks: 0 };
 
   it('reads Tight, not Not-reachable, when the reachable long run is within the threshold of the target', () => {
     // budget = weeksAvailable(1) - taper(2) -> clamped to 0, so the
     // reachable long run stays at the baseline: 25 / 27 = 92.6%, well
     // above the 80% floor.
-    const f = feasibility(r, 25, 50, 1, DEFAULTS);
+    const f = feasibility(r, 25, 50, 1, NOT_LOCKED_IN);
     expect(f.maxReachableLongRunKm).toBeCloseTo(25);
     expect(f.status).toBe('TIGHT');
   });
 
   it('stays Not-reachable when the reachable long run falls below the threshold of the target', () => {
     // 20 / 27 = 74%, below the 80% floor.
-    const f = feasibility(r, 20, 50, 1, DEFAULTS);
+    const f = feasibility(r, 20, 50, 1, NOT_LOCKED_IN);
     expect(f.maxReachableLongRunKm).toBeCloseTo(20);
     expect(f.status).toBe('NOT_REACHABLE');
   });
@@ -124,7 +132,7 @@ describe('feasibility: Tight-vs-Not-reachable long-run rescue at settings.feasib
     // so the race still reads Tight, not Not-reachable (round 8 gated
     // this on the long run being the binding dimension; round 9 dropped
     // that qualifier).
-    const f = feasibility(r, 50, 10, 2, DEFAULTS);
+    const f = feasibility(r, 50, 10, 2, NOT_LOCKED_IN);
     expect(f.maxReachableLongRunKm).toBeGreaterThan(raceTargets(r, DEFAULTS).peakLongRunKm);
     expect(f.status).toBe('TIGHT');
   });
@@ -137,7 +145,7 @@ describe('feasibility: Tight-vs-Not-reachable long-run rescue at settings.feasib
     // itself. Derived from the setting, not a hardcoded 85%, so this stays
     // correct if the default ever changes again.
     const target = raceTargets(r, DEFAULTS).peakLongRunKm;
-    const f = feasibility(r, target * DEFAULTS.feasibilityTightReachableFactor, 50, 2, DEFAULTS);
+    const f = feasibility(r, target * DEFAULTS.feasibilityTightReachableFactor, 50, 2, NOT_LOCKED_IN);
     expect(f.status).toBe('TIGHT');
   });
 
@@ -151,14 +159,14 @@ describe('feasibility: Tight-vs-Not-reachable long-run rescue at settings.feasib
     const target = raceTargets(bigB, DEFAULTS).peakLongRunKm;
     expect(target).toBeCloseTo(47, 0);
 
-    const f = feasibility(bigB, 39.6, 100, 2, DEFAULTS);
+    const f = feasibility(bigB, 39.6, 100, 2, NOT_LOCKED_IN);
     expect(f.maxReachableLongRunKm).toBeCloseTo(39.6);
     expect(f.status).toBe('TIGHT');
 
     // Confirms this really is the 80%-vs-85% boundary, not a fluke of the
     // fixture: a stricter 85% setting puts the exact same case back to
     // Not-reachable.
-    const strict = feasibility(bigB, 39.6, 100, 2, { ...DEFAULTS, feasibilityTightReachableFactor: 0.85 });
+    const strict = feasibility(bigB, 39.6, 100, 2, { ...NOT_LOCKED_IN, feasibilityTightReachableFactor: 0.85 });
     expect(strict.status).toBe('NOT_REACHABLE');
   });
 });
@@ -196,7 +204,11 @@ describe('feasibility: weekly volume dimension', () => {
   });
 
   it('reports the peak week capped below the race\'s own target when volume is not reachable', () => {
-    const f = feasibility(r, 50, 10, 2, DEFAULTS); // no room for any Build step (2 taper weeks alone use the budget)
+    // budget 0 (2 taper weeks alone use the 2-week budget) falls inside
+    // the LOCKED_IN window (no race taper exceeds 3 weeks), so this tests
+    // the rescue math itself with that override disabled -- see the
+    // Tight-vs-Not-reachable describe block above for the same pattern.
+    const f = feasibility(r, 50, 10, 2, { ...DEFAULTS, feasibilityLockedInWeeks: 0 });
     // currentLR30=50 is trivially reachable/comfortable for this race's
     // small 27km peak long run, so the unconditional rescue (round 9
     // item 3) lifts this from Not-reachable to Tight even though volume
@@ -211,6 +223,48 @@ describe('feasibility: weekly volume dimension', () => {
   it('never reports a reachable peak week above the race\'s own target, however much slack there is', () => {
     const f = feasibility(r, 50, 200, 20, DEFAULTS); // C already far above what's needed
     expect(f.maxReachableWeekKm).toBeCloseTo(54); // capped at the target itself, not 1.2*200
+  });
+});
+
+// v1.1 review round 10 follow-up item 4: inside a race's own final weeks
+// there's no more building left to project -- every remaining week is
+// taper or the race itself -- so a Tight/Not-reachable verdict there just
+// restates a shortfall nothing can still close. A live report: a race 23
+// days (and so, with its own 3-week A-priority taper, 1 week of real build
+// time) out read "Not safely reachable", which is honest about the math
+// but misleading once nothing can be done about it any more.
+describe('feasibility: LOCKED_IN inside the race\'s own final weeks', () => {
+  const r = race({ priority: 'A', km: 100, dplusM: 5000, dminusM: 4800 }); // 3-week taper (over 100km)
+
+  it('reports LOCKED_IN, not Not-reachable, once weeksAvailable reaches the taper window', () => {
+    // currentLR30=35 is nowhere near this race's big peak long run -- would
+    // read Not-reachable on the ordinary slack math (confirmed below with
+    // the override disabled) -- but once there's no build budget left, the
+    // honest answer is "this is what you've got", not a verdict.
+    const notLockedIn = feasibility(r, 35, 60, 3, { ...DEFAULTS, feasibilityLockedInWeeks: 0 });
+    expect(notLockedIn.status).toBe('NOT_REACHABLE');
+
+    const f = feasibility(r, 35, 60, 3, DEFAULTS);
+    expect(f.status).toBe('LOCKED_IN');
+    // The real, already-banked LR30 -- not a growth projection (budget
+    // would be 0 here anyway, 3 weeks available - 3 taper weeks needed).
+    expect(f.maxReachableLongRunKm).toBe(35);
+  });
+
+  it('overrides an otherwise-Feasible verdict too -- LOCKED_IN is about timing, not the underlying math', () => {
+    const f = feasibility(r, 200, 200, 2, DEFAULTS); // comfortably over every target
+    expect(f.status).toBe('LOCKED_IN');
+    expect(f.maxReachableLongRunKm).toBe(200);
+  });
+
+  it('does not fire outside the taper window', () => {
+    const f = feasibility(r, 35, 60, DEFAULTS.feasibilityLockedInWeeks + 1, DEFAULTS);
+    expect(f.status).not.toBe('LOCKED_IN');
+  });
+
+  it('is configurable via settings.feasibilityLockedInWeeks', () => {
+    const f = feasibility(r, 35, 60, 3, { ...DEFAULTS, feasibilityLockedInWeeks: 1 });
+    expect(f.status).not.toBe('LOCKED_IN'); // 3 weeks available > the lowered 1-week threshold
   });
 });
 

@@ -9,6 +9,7 @@ import {
   feasibility,
   flags,
   isReentryWeek,
+  longRunDescentShare,
   mergeRuns,
   mondayOf,
   raceStructureSlots,
@@ -77,11 +78,11 @@ export function blendCurrentWeekReference(dense: TimelinePoint[], currentWeekSta
   const plannedLongRunKm = planned.longRunKm ?? 0;
   if (plannedLongRunKm > (current.longRunKm ?? 0)) {
     current.longRunKm = plannedLongRunKm;
-    // Planned weeks only ever carry a weekly D- total, not a per-run
-    // figure (buildDenseTimeline's own convention above for a planned
-    // week's longRunLossM); matched here so the pairing stays consistent
-    // when the planned long run is what wins.
-    current.longRunLossM = planned.dminusM ?? null;
+    // The long run's own share of the planned weekly D- total, not the
+    // whole week (buildDenseTimeline's own longRunDescentShare() above for
+    // a planned week's longRunLossM); matched here so the pairing stays
+    // consistent when the planned long run is what wins.
+    current.longRunLossM = longRunDescentShare(planned.dminusM ?? 0, plannedLongRunKm, planned.km ?? 0);
     current.longRunDate = currentWeekStart;
   }
 }
@@ -285,19 +286,31 @@ export async function buildState(env: Env): Promise<StateResponse> {
       peakLongRunKm: nextABRacePeakLR(races, w.weekStart, settings),
     });
 
+    // The current week's own flags/verdict read only what's actually been
+    // run so far, never the blended-up-to-planned dense entry: that blend
+    // exists solely so *later* weeks' week-on-week/reference math doesn't
+    // read an artificially low still-in-progress week as a huge jump (see
+    // blendCurrentWeekReference's own comment above) -- it was never meant
+    // to make this week's own verdict judge the plan's target as if it had
+    // already happened (a Peak week's planned long run reading as today's
+    // own single-run descent, overloaded before a single km of it has been
+    // run, v1.1 review round 10 follow-up item 1). Every other week's w.*
+    // fields already *are* pure actual (past) or pure planned (future), so
+    // only the current week needs this split.
+    const isCurrentWeek = w.weekStart === currentWeekStart;
     const flagList = flags(
       {
         weekType: effectiveType,
-        kmWeek: w.kmWeek,
-        longestKm: w.longRunKm ?? 0,
-        longestLossM: w.longRunLossM ?? 0,
-        dminusWeek: w.dminusWeek,
+        kmWeek: isCurrentWeek ? doneKmWeek : w.kmWeek,
+        longestKm: isCurrentWeek ? doneLongestKm : (w.longRunKm ?? 0),
+        longestLossM: isCurrentWeek ? doneLongestLossM : (w.longRunLossM ?? 0),
+        dminusWeek: isCurrentWeek ? doneDminusWeek : w.dminusWeek,
         refs,
         checkin: weekCheckin,
         priorCheckinsAsc,
         prevWeekKm: prevKm,
         prevWeekType: prevType,
-        weekInProgress: w.weekStart === currentWeekStart,
+        weekInProgress: isCurrentWeek,
         reentry,
       },
       settings,

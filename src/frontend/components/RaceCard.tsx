@@ -59,19 +59,28 @@ export function RaceCard({
         </div>
       </div>
 
-      {feasibility && (
-        <div class="race-meta">
-          <span class={`pill pill-${feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[feasibility.status]}</span>
-          <span class="muted">
-            Long run reachable: {fmtKm(feasibility.maxReachableLongRunKm)} km (target {fmtKm(targets.peakLongRunKm)} km)
-          </span>
-          {cappedAtKm != null && cappedAtKm < targets.peakWeekEffortKm - 0.5 && (
+      {feasibility &&
+        (feasibility.status === 'LOCKED_IN' ? (
+          // No more building left to project inside the race's own final
+          // weeks (v1.1 review round 10 follow-up item 4) -- a Tight/Not-
+          // reachable verdict here would just restate a shortfall nothing
+          // can still close, so show what's actually been banked instead.
+          <div class="race-meta">
+            <span class="pill">Peak long run done: {fmtKm(feasibility.maxReachableLongRunKm)} km</span>
+          </div>
+        ) : (
+          <div class="race-meta">
+            <span class={`pill pill-${feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[feasibility.status]}</span>
             <span class="muted">
-              Peak week capped at {fmtKm(cappedAtKm)} km (race target {fmtKm(targets.peakWeekEffortKm)} km)
+              Long run reachable: {fmtKm(feasibility.maxReachableLongRunKm)} km (target {fmtKm(targets.peakLongRunKm)} km)
             </span>
-          )}
-        </div>
-      )}
+            {cappedAtKm != null && cappedAtKm < targets.peakWeekEffortKm - 0.5 && (
+              <span class="muted">
+                Peak week capped at {fmtKm(cappedAtKm)} km (race target {fmtKm(targets.peakWeekEffortKm)} km)
+              </span>
+            )}
+          </div>
+        ))}
 
       <div class="race-targets">
         <div class="race-target-row">

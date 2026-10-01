@@ -185,7 +185,10 @@ export interface RaceTargets {
   taper: TaperWeek[];
 }
 
-export type FeasibilityStatus = 'FEASIBLE' | 'TIGHT' | 'NOT_REACHABLE';
+// LOCKED_IN: inside the race's own final weeks (feasibilityLockedInWeeks),
+// where there's no more building left to project -- see feasibility()'s
+// own comment (v1.1 review round 10 follow-up item 4).
+export type FeasibilityStatus = 'FEASIBLE' | 'TIGHT' | 'NOT_REACHABLE' | 'LOCKED_IN';
 
 export interface Feasibility {
   status: FeasibilityStatus;

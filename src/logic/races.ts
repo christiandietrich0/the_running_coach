@@ -112,5 +112,17 @@ export function feasibility(race: Race, currentLR30: number, currentC: number, w
   const reachableC = reachableAt(currentC, budget, settings);
   const maxReachableWeekKm = Math.min(targets.peakWeekEffortKm, reachableC * settings.ratioZoneEdges.greenMax);
 
+  // Inside the race's own final weeks there's no more building left to
+  // project: every remaining week is taper or the race itself, so a
+  // Tight/Not-reachable verdict just restates a shortfall nothing can
+  // still close. From here the only honest answer is what's actually been
+  // banked, not a growth projection (v1.1 review round 10 follow-up item
+  // 4) -- currentLR30 directly, not maxReachableLongRunKm's budget-based
+  // projection, since "reachable" and "already done" are the same thing
+  // once there's no build budget left.
+  if (weeksAvailable <= settings.feasibilityLockedInWeeks) {
+    return { status: 'LOCKED_IN', weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm: currentLR30, maxReachableWeekKm };
+  }
+
   return { status, weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm, maxReachableWeekKm };
 }

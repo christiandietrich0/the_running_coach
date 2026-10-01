@@ -22,6 +22,10 @@ export const FEASIBILITY_LABEL: Record<FeasibilityStatus, string> = {
   FEASIBLE: 'Feasible',
   TIGHT: 'Tight',
   NOT_REACHABLE: 'Not safely reachable',
+  // Not actually shown: LOCKED_IN renders its own "Peak long run done: Xkm"
+  // pill instead (RaceCard.tsx/NextRaceCard.tsx), since this static label
+  // can't carry that number. Kept here only so this stays an exhaustive map.
+  LOCKED_IN: 'Peak long run done',
 };
 
 export const WEEK_TYPES: WeekType[] = ['BUILD', 'HOLD', 'DOWN', 'TAPER', 'RACE', 'LIMITED', 'RECOVERY'];

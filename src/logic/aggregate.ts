@@ -118,10 +118,21 @@ export function weeklyAggregates(runs: Run[], settings: Settings): Map<string, W
 // item 1). A planned RACE week already sets these directly from the race
 // (plan.ts), independent of this file.
 // Planned weeks only carry a weekly D- total (plan_weeks.dminus_m), not a
-// per-run figure; since this athlete's descent load sits almost entirely
-// on the long run of a 3-run week, the planned long run's D- is
-// approximated as the full planned weekly D- (suggestPlan uses the same
-// convention when deriving D+/D- for weeks it fills, mechanics brief 7.3).
+// per-run figure. Crediting the *whole* weekly total to the long run alone
+// (as if it were one run's own descent) made every planned/blended week's
+// DESCENT_SINGLE flag -- and, once a planned point ages into LR30/D30's own
+// reference pool, D30 itself -- compare a weekly total against the
+// single-run cap, flagging red (or inflating the reference) long before any
+// single run was ever that steep. Approximated instead as the long run's
+// own share of the week's distance -- the same assumption suggestPlan()
+// already makes when it derives a week's D+/D- in the first place (this
+// athlete's descent load sits almost entirely on the long run of a 3-run
+// week, mechanics brief 7.3), just not collapsed down to "the whole week
+// is one run" (v1.1 review round 10 follow-up item 1).
+export function longRunDescentShare(dminusWeek: number, longRunKm: number, kmWeek: number): number {
+  return kmWeek > 0 ? dminusWeek * (longRunKm / kmWeek) : dminusWeek;
+}
+
 export function buildDenseTimeline(
   actual: WeeklyAggregate[],
   planned: PlanWeek[],
@@ -166,7 +177,7 @@ export function buildDenseTimeline(
       kmWeek: p.km ?? 0,
       dminusWeek: p.dminusM ?? 0,
       longRunKm,
-      longRunLossM: longRunKm == null ? null : p.dminusM ?? null,
+      longRunLossM: longRunKm == null ? null : longRunDescentShare(p.dminusM ?? 0, longRunKm, p.km ?? 0),
       longRunDate: longRunKm == null ? null : p.weekStart,
       isRaceWeek,
       weekType: p.type,

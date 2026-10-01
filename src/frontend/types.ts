@@ -103,7 +103,7 @@ export interface RaceTargets {
   taper: TaperWeek[];
 }
 
-export type FeasibilityStatus = 'FEASIBLE' | 'TIGHT' | 'NOT_REACHABLE';
+export type FeasibilityStatus = 'FEASIBLE' | 'TIGHT' | 'NOT_REACHABLE' | 'LOCKED_IN';
 
 export interface Feasibility {
   status: FeasibilityStatus;

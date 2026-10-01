@@ -65,6 +65,14 @@ export interface Defaults {
   // round 10 follow-up item 3) after a 39.6 vs 47 km case (84.3%) stayed
   // Not-reachable under the old fixed threshold.
   feasibilityTightReachableFactor: number;
+  // Inside a race's own final weeks there's no more building left to
+  // project: every remaining week is taper (or the race itself), so a
+  // Tight/Not-reachable verdict just restates a shortfall nothing can
+  // still close. Within this many weeks of the race, feasibility() reports
+  // the neutral LOCKED_IN status instead, and the UI shows what's actually
+  // been banked ("Peak long run done: Xkm") rather than a growth verdict
+  // (v1.1 review round 10 follow-up item 4).
+  feasibilityLockedInWeeks: number;
   // injuryRisk.ts (v1.1 review round 10 Part 2): a load-based early-warning
   // signal, not a medical prediction -- see injuryRisk.ts's own header
   // comment for the full scoring shape.
@@ -135,6 +143,7 @@ export const DEFAULTS: Defaults = {
   maxLongRunKm: 55,
   includeHikes: false,
   feasibilityTightReachableFactor: 0.8,
+  feasibilityLockedInWeeks: 3,
   injuryRisk: {
     weekWeights: [1.0, 0.6, 0.4, 0.2],
     flagPoints: { yellow: 1, red: 3 },
