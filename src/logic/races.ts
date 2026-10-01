@@ -74,7 +74,33 @@ function reachableAt(current: number, budget: number, settings: Settings): numbe
 // not as a plan that quietly generates a yellow/red week. The race is only
 // as feasible as its more demanding dimension, so weeksNeeded is the worse
 // of the two arms; slack = weeksAvailable - weeksNeeded (6.4).
-export function feasibility(race: Race, currentLR30: number, currentC: number, weeksAvailable: number, settings: Settings): Feasibility {
+export interface FeasibilityExtra {
+  // Set by the caller (state.ts) when the current week is this race's own
+  // Peak, Taper, or Race week -- i.e. no Build weeks remain before it, so
+  // suggestPlan has already capped everything and there's nothing left to
+  // project (v1.1 review round 10 follow-up item 4, refined). Takes
+  // priority over the weeksAvailable-based threshold below, which only
+  // ever acts as a fallback for when the caller can't determine this (e.g.
+  // no plan has been generated for the race yet).
+  lockedInByWeekType?: boolean;
+  // The feasibility reading from the last genuine Build week for this race
+  // (the week right before Peak), computed by the caller from that week's
+  // own historical LR30/C -- surfaced on the result as lastBuildStatus/
+  // lastBuildMaxReachableLongRunKm so the UI can still show what the build
+  // phase actually predicted ("Build ended Tight (35 of 47 km)") once
+  // locked in. Omitted (or null on the result) when there's no Peak week
+  // for this race yet (e.g. a C-priority race, which never tapers).
+  lastBuild?: { status: FeasibilityStatus; maxReachableLongRunKm: number };
+}
+
+export function feasibility(
+  race: Race,
+  currentLR30: number,
+  currentC: number,
+  weeksAvailable: number,
+  settings: Settings,
+  extra?: FeasibilityExtra,
+): Feasibility {
   const targets = raceTargets(race, settings);
   const taperWeeksNeeded = targets.taper.length;
 
@@ -113,16 +139,32 @@ export function feasibility(race: Race, currentLR30: number, currentC: number, w
   const maxReachableWeekKm = Math.min(targets.peakWeekEffortKm, reachableC * settings.ratioZoneEdges.greenMax);
 
   // Inside the race's own final weeks there's no more building left to
-  // project: every remaining week is taper or the race itself, so a
+  // project: every remaining week is Peak, taper, or the race itself, so a
   // Tight/Not-reachable verdict just restates a shortfall nothing can
   // still close. From here the only honest answer is what's actually been
   // banked, not a growth projection (v1.1 review round 10 follow-up item
   // 4) -- currentLR30 directly, not maxReachableLongRunKm's budget-based
   // projection, since "reachable" and "already done" are the same thing
-  // once there's no build budget left.
-  if (weeksAvailable <= settings.feasibilityLockedInWeeks) {
-    return { status: 'LOCKED_IN', weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm: currentLR30, maxReachableWeekKm };
+  // once there's no build budget left. The caller's own week-type read
+  // (lockedInByWeekType) is the real signal -- it knows whether *this*
+  // week is Peak/Taper/Race for *this* race, which a raw weeksAvailable
+  // count can't distinguish from an ordinary Build week far out for a
+  // race with an unusually long taper. weeksAvailable <=
+  // feasibilityLockedInWeeks only stands in for that when the caller can't
+  // say (e.g. no plan generated for this race yet).
+  const lockedIn = extra?.lockedInByWeekType ?? weeksAvailable <= settings.feasibilityLockedInWeeks;
+  if (lockedIn) {
+    return {
+      status: 'LOCKED_IN',
+      weeksNeeded,
+      weeksAvailable,
+      slack,
+      maxReachableLongRunKm: currentLR30,
+      maxReachableWeekKm,
+      lastBuildStatus: extra?.lastBuild?.status ?? null,
+      lastBuildMaxReachableLongRunKm: extra?.lastBuild?.maxReachableLongRunKm ?? null,
+    };
   }
 
-  return { status, weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm, maxReachableWeekKm };
+  return { status, weeksNeeded, weeksAvailable, slack, maxReachableLongRunKm, maxReachableWeekKm, lastBuildStatus: null, lastBuildMaxReachableLongRunKm: null };
 }

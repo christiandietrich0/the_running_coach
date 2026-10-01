@@ -6,7 +6,7 @@
 // every client picks up the new shell/assets instead of a stale cached
 // one -- the activate handler below already deletes any cache key that
 // doesn't match this one.
-const CACHE_NAME = 'legroom-v12';
+const CACHE_NAME = 'legroom-v13';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

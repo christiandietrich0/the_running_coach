@@ -112,6 +112,8 @@ export interface Feasibility {
   slack: number;
   maxReachableLongRunKm: number;
   maxReachableWeekKm: number;
+  lastBuildStatus: FeasibilityStatus | null;
+  lastBuildMaxReachableLongRunKm: number | null;
 }
 
 export interface RaceState {

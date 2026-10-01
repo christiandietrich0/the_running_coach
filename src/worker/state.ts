@@ -22,6 +22,7 @@ import {
 } from '../logic';
 import { addDays, addWeeks, diffDays } from '../logic/dates';
 import type { InjuryRiskWeekInput } from '../logic/injuryRisk';
+import type { FeasibilityExtra } from '../logic/races';
 import type { CheckIn, Corridor, Feasibility, Flag, InjuryRisk, PlanWeek, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
 import { getLastPlanUpdateAt, loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
@@ -210,6 +211,45 @@ export interface StateResponse {
 
 function toRunDto(run: Run): RunDTO {
   return { id: run.id, startLocal: run.startLocal, distanceM: run.distanceM, movingS: run.movingS, gainM: run.gainM, lossM: run.lossM, isRace: run.isRace };
+}
+
+// feasibility()'s own LOCKED_IN signal, derived from each week's already-
+// computed race-slot tags (peakForRaceId/taperForRaceId/raceId, set by the
+// main weeks.map() loop above from raceStructureSlots) rather than a raw
+// weeksAvailable count: the current week is this race's own Peak, Taper,
+// or Race week -- no Build weeks remain before it -- regardless of how
+// many calendar weeks that happens to be (v1.1 review round 10 follow-up
+// item 4, refined). Exported standalone (taking the already-built `weeks`
+// array, not buildState()'s own closure) so it's testable without a D1
+// mock.
+export function raceFeasibilityExtra(weeks: WeekStateDTO[], currentWeekStart: string, race: Race, settings: Defaults): FeasibilityExtra {
+  const currentWeekDto = weeks.find((w) => w.weekStart === currentWeekStart);
+  const lockedInByWeekType =
+    !!currentWeekDto &&
+    (currentWeekDto.peakForRaceId === race.id ||
+      currentWeekDto.taperForRaceId === race.id ||
+      (currentWeekDto.type === 'RACE' && currentWeekDto.raceId === race.id));
+
+  // The last genuine Build week for this race (the week right before
+  // Peak) and what feasibility() said then, from that week's own already-
+  // computed refs -- so the UI can still show "Build ended Tight (35 of
+  // 47km)" once locked in, instead of just losing that information. No
+  // Peak week (e.g. a C-priority race, which never tapers) means no such
+  // reading.
+  const peakWeek = weeks.find((w) => w.peakForRaceId === race.id);
+  let lastBuild: FeasibilityExtra['lastBuild'];
+  if (peakWeek) {
+    const lastBuildWeekStart = addDays(peakWeek.weekStart, -7);
+    const lastBuildWeek = weeks.find((w) => w.weekStart === lastBuildWeekStart);
+    if (lastBuildWeek) {
+      const raceMonday = mondayOf(race.date);
+      const lastBuildWeeksAvailable = Math.floor(diffDays(raceMonday, lastBuildWeekStart) / 7) + 1;
+      const lastBuildFeas = feasibility(race, lastBuildWeek.refs.LR30, lastBuildWeek.refs.C, lastBuildWeeksAvailable, settings);
+      lastBuild = { status: lastBuildFeas.status, maxReachableLongRunKm: lastBuildFeas.maxReachableLongRunKm };
+    }
+  }
+
+  return { lockedInByWeekType, lastBuild };
 }
 
 export async function buildState(env: Env): Promise<StateResponse> {
@@ -421,7 +461,8 @@ export async function buildState(env: Env): Promise<StateResponse> {
     let feas: Feasibility | null = null;
     if (raceMonday >= currentWeekStart) {
       const weeksAvailable = Math.floor(diffDays(raceMonday, currentWeekStart) / 7) + 1;
-      feas = feasibility(race, currentRefs.LR30, currentRefs.C, weeksAvailable, settings);
+      const extra = raceFeasibilityExtra(weeks, currentWeekStart, race, settings);
+      feas = feasibility(race, currentRefs.LR30, currentRefs.C, weeksAvailable, settings, extra);
     }
     return { ...race, targets, feasibility: feas };
   });

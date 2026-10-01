@@ -268,6 +268,52 @@ describe('feasibility: LOCKED_IN inside the race\'s own final weeks', () => {
   });
 });
 
+// v1.1 review round 10 follow-up item 4, refined: a live report that the
+// Puglia UTMB card stayed "Not safely reachable" on the week it actually
+// became the race's own Peak week (23 days out, 1 real Build week left per
+// the weeksAvailable-based rule, which only locks in inside the taper
+// itself) -- the real signal is the current week's own race-slot tag
+// (Peak/Taper/Race for *this* race), passed in by the caller, not a raw
+// weeksAvailable count.
+describe('feasibility: lockedInByWeekType (the caller\'s own week-type signal)', () => {
+  const r = race({ priority: 'A', km: 100, dplusM: 5000, dminusM: 4800 });
+
+  it('locks in on the caller\'s say-so even with plenty of weeksAvailable left', () => {
+    const f = feasibility(r, 35, 60, 10, DEFAULTS, { lockedInByWeekType: true });
+    expect(f.status).toBe('LOCKED_IN');
+    expect(f.maxReachableLongRunKm).toBe(35); // the real banked LR30, not a 10-week growth projection
+  });
+
+  it('overrides the weeksAvailable-based fallback when the caller says this is still a Build week', () => {
+    // Without the override, 2 weeks available would fall inside the
+    // fallback's own default 3-week window and lock in anyway -- the
+    // caller's explicit "false" must win, since it means Peak/Taper/Race
+    // hasn't started yet for this race (e.g. an unusually long taper).
+    const f = feasibility(r, 35, 60, 2, DEFAULTS, { lockedInByWeekType: false });
+    expect(f.status).not.toBe('LOCKED_IN');
+  });
+
+  it('surfaces the last-Build-week reading alongside the locked-in status', () => {
+    const f = feasibility(r, 35, 60, 3, DEFAULTS, {
+      lockedInByWeekType: true,
+      lastBuild: { status: 'TIGHT', maxReachableLongRunKm: 35 },
+    });
+    expect(f.status).toBe('LOCKED_IN');
+    expect(f.lastBuildStatus).toBe('TIGHT');
+    expect(f.lastBuildMaxReachableLongRunKm).toBe(35);
+  });
+
+  it('leaves the last-Build-week fields null when not locked in, and when locked in with no reading supplied', () => {
+    const notLockedIn = feasibility(r, 35, 60, 10, DEFAULTS, { lockedInByWeekType: false });
+    expect(notLockedIn.lastBuildStatus).toBeNull();
+    expect(notLockedIn.lastBuildMaxReachableLongRunKm).toBeNull();
+
+    const lockedInNoReading = feasibility(r, 35, 60, 3, DEFAULTS, { lockedInByWeekType: true });
+    expect(lockedInNoReading.lastBuildStatus).toBeNull();
+    expect(lockedInNoReading.lastBuildMaxReachableLongRunKm).toBeNull();
+  });
+});
+
 // v1.1 review A7: feasibility was too optimistic because it fed in a
 // stale/about-to-expire LR30. Fixed as a consequence of A2 (LR30 is now
 // evaluated as of the week's Sunday, not its Monday), not by any change to

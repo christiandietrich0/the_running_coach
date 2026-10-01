@@ -210,4 +210,12 @@ export interface Feasibility {
   // stretch on weekly volume alone while comfortably Tight or even
   // Feasible on long run.
   maxReachableWeekKm: number;
+  // Set only when status is LOCKED_IN and a Peak week exists for this
+  // race: the status/reachable-long-run reading from the last genuine
+  // Build week (the week right before Peak), so the UI can still show
+  // what the build phase actually predicted ("Build ended Tight (35 of
+  // 47 km)") alongside the now-locked-in read (v1.1 review round 10
+  // follow-up item 4, refined).
+  lastBuildStatus: FeasibilityStatus | null;
+  lastBuildMaxReachableLongRunKm: number | null;
 }

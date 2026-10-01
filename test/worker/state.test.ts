@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { flags, verdict } from '../../src/logic/flags';
 import { longRunDescentShare } from '../../src/logic/aggregate';
 import { DEFAULTS } from '../../src/worker/defaults';
-import { blendCurrentWeekReference } from '../../src/worker/state';
-import type { PlanWeek, References, TimelinePoint } from '../../src/logic/types';
+import { blendCurrentWeekReference, raceFeasibilityExtra, type WeekStateDTO } from '../../src/worker/state';
+import type { PlanWeek, Race, References, TimelinePoint } from '../../src/logic/types';
 
 function denseEntry(overrides: Partial<TimelinePoint> = {}): TimelinePoint {
   return {
@@ -181,5 +181,117 @@ describe("the current week's own flags use only what's actually been run, never 
       DEFAULTS,
     );
     expect(verdict(flagList).colour).not.toBe('RED');
+  });
+});
+
+function race(overrides: Partial<Race> = {}): Race {
+  return { id: 1, name: 'Puglia UTMB', date: '2026-10-24', km: 100, dplusM: 5000, dminusM: 4800, targetTimeMin: null, priority: 'A', ...overrides };
+}
+
+function weekDto(overrides: Partial<WeekStateDTO> = {}): WeekStateDTO {
+  return {
+    weekStart: '2026-09-28',
+    isActual: false,
+    kmWeek: 67.5,
+    effortKmWeek: 67.5,
+    mechKmWeek: 67.5,
+    dminusWeek: 703,
+    runsWeek: 3,
+    longestKm: 35,
+    longestLossM: 364.7,
+    doneKmWeek: 15,
+    doneDminusWeek: 83,
+    doneLongestKm: 15,
+    doneLongestLossM: 83,
+    doneDplusM: 0,
+    doneEffortKmWeek: 15,
+    plannedKm: 67.5,
+    plannedLongRunKm: 35,
+    plannedDplusM: 1040,
+    plannedDminusM: 703,
+    type: 'BUILD',
+    symptomLocked: false,
+    userEdited: false,
+    limitedDays: null,
+    limitedKmCap: null,
+    refs: { C: 60, LR30: 35, D30: 363, DW4: 875, M12: 60, mean4Week: 60, mean10Week: 60, buildMean: 60, weeksUsedForC: 4 },
+    corridor: { kmMin: 60, kmMax: 70, lrMax: 35, dminusWeekMax: 1137, dminusRunMax: 436 },
+    flags: [],
+    verdict: { colour: 'RED', reason: 'test', flags: [] },
+    raceConflictType: null,
+    raceId: null,
+    raceName: null,
+    peakForRaceId: null,
+    taperForRaceId: null,
+    recoveryForRaceId: null,
+    guidance: null,
+    ...overrides,
+  };
+}
+
+// v1.1 review round 10 follow-up item 4, refined: the live Puglia UTMB
+// report -- the card stayed "Not safely reachable" on the week it actually
+// became the race's own Peak week (Sep 28, 23 days out), because the old
+// rule only locked in inside settings.feasibilityLockedInWeeks of the race
+// itself. raceFeasibilityExtra() is the exact function buildState() calls
+// per race to decide this; tested directly here (not through the full D1-
+// backed buildState()) against a hand-built `weeks` array shaped like the
+// real Plan screen: Peak Sep 28 (today), Taper Oct 5/12, Race Oct 19.
+describe('raceFeasibilityExtra', () => {
+  const r = race();
+
+  it('locks in on the current week being this race\'s own Peak week, and surfaces the last Build week\'s own reading', () => {
+    const weeks = [
+      // The last genuine Build week, one week before Peak: this is what
+      // feasibility actually predicted while still building.
+      weekDto({ weekStart: '2026-09-21', refs: { ...weekDto().refs, LR30: 35, C: 60 } }),
+      // Today: the Peak week itself, tagged for this race.
+      weekDto({ weekStart: '2026-09-28', peakForRaceId: r.id }),
+      weekDto({ weekStart: '2026-10-05', taperForRaceId: r.id, type: 'TAPER' }),
+      weekDto({ weekStart: '2026-10-12', taperForRaceId: r.id, type: 'TAPER' }),
+      weekDto({ weekStart: '2026-10-19', type: 'RACE', raceId: r.id }),
+    ];
+
+    const extra = raceFeasibilityExtra(weeks, '2026-09-28', r, DEFAULTS);
+    expect(extra.lockedInByWeekType).toBe(true);
+    expect(extra.lastBuild).toBeDefined();
+    // Sep 21 was still an ordinary Build week (not locked in), so its own
+    // reading is the normal growth projection from that week's LR30 (35km)
+    // over its own remaining budget -- the same math/field every other
+    // Build week's "Long run reachable" shows, just captured at the last
+    // moment it still applied, not a locked-in freeze of the raw number.
+    expect(extra.lastBuild!.maxReachableLongRunKm).toBeGreaterThan(35);
+    expect(extra.lastBuild!.status).not.toBe('LOCKED_IN');
+  });
+
+  it('does not lock in on an ordinary Build week, even one close to the race', () => {
+    const weeks = [
+      weekDto({ weekStart: '2026-09-21', type: 'BUILD' }), // no peak/taper/race tag at all yet
+      weekDto({ weekStart: '2026-09-28', peakForRaceId: r.id }),
+    ];
+    const extra = raceFeasibilityExtra(weeks, '2026-09-21', r, DEFAULTS);
+    expect(extra.lockedInByWeekType).toBe(false);
+  });
+
+  it('locks in on the Taper and Race weeks too, not just Peak', () => {
+    const weeks = [
+      weekDto({ weekStart: '2026-09-28', peakForRaceId: r.id }),
+      weekDto({ weekStart: '2026-10-05', taperForRaceId: r.id, type: 'TAPER' }),
+      weekDto({ weekStart: '2026-10-19', type: 'RACE', raceId: r.id }),
+    ];
+    expect(raceFeasibilityExtra(weeks, '2026-10-05', r, DEFAULTS).lockedInByWeekType).toBe(true);
+    expect(raceFeasibilityExtra(weeks, '2026-10-19', r, DEFAULTS).lockedInByWeekType).toBe(true);
+  });
+
+  it('leaves lastBuild undefined when there is no Peak week for this race yet (or at all)', () => {
+    const weeks = [weekDto({ weekStart: '2026-09-28', type: 'BUILD' })];
+    const extra = raceFeasibilityExtra(weeks, '2026-09-28', r, DEFAULTS);
+    expect(extra.lastBuild).toBeUndefined();
+  });
+
+  it('leaves lastBuild undefined when the Peak week exists but the week before it is not in the timeline', () => {
+    const weeks = [weekDto({ weekStart: '2026-09-28', peakForRaceId: r.id })]; // 2026-09-21 missing
+    const extra = raceFeasibilityExtra(weeks, '2026-09-28', r, DEFAULTS);
+    expect(extra.lastBuild).toBeUndefined();
   });
 });
