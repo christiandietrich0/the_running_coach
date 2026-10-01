@@ -68,7 +68,7 @@ export function RaceCard({
             </span>
             {feasibility.lastBuildStatus != null && (
               <span class="muted">
-                Build ended {FEASIBILITY_LABEL[feasibility.lastBuildStatus]} ({fmtKm(feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of{' '}
+                Build ended: {FEASIBILITY_LABEL[feasibility.lastBuildStatus].toLowerCase()} ({fmtKm(feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of{' '}
                 {fmtKm(targets.peakLongRunKm)} km)
               </span>
             )}
@@ -88,6 +88,7 @@ export function RaceCard({
         ))}
 
       <div class="race-targets">
+        {feasibility?.status === 'LOCKED_IN' && <div class="stat-label">Targets</div>}
         <div class="race-target-row">
           <span class="muted">Peak long run</span>
           <span>{fmtKm(targets.peakLongRunKm)} km</span>
@@ -111,13 +112,21 @@ export function RaceCard({
           <div class="stat-label">Taper</div>
           {targets.taper.map((t) => {
             const week = weeksByStart.get(t.weekStart);
+            // The race week's own kmWeek is the race distance plus any
+            // shakeout runs added on top of it (raceWeekShakeouts,
+            // defaults.ts), so showing it as one summed number reads as a
+            // much bigger training week than it is -- "10 km + race" splits
+            // the shakeouts back out from the race itself (v1.1 review
+            // round 10 follow-up, final pre-1.0 pass item 4).
+            const isRaceWeek = t.label === 'race week';
+            const trainingKm = isRaceWeek && week ? Math.max(0, week.kmWeek - race.km) : null;
             return (
               <div class="taper-row" key={t.weekStart}>
                 <span class="taper-row-label">
                   {t.label}
                   <span class="taper-row-date">{fmtShortDate(t.weekStart)}</span>
                 </span>
-                <span>{week ? `${fmtKm(week.kmWeek)} km` : '--'}</span>
+                <span>{trainingKm != null ? `${fmtKm(trainingKm)} km + race` : week ? `${fmtKm(week.kmWeek)} km` : '--'}</span>
               </div>
             );
           })}

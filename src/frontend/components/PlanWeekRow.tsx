@@ -54,7 +54,7 @@ export function PlanWeekRow({
   onClick: () => void;
 }) {
   const dplusM = Math.max(0, (week.effortKmWeek - week.kmWeek) * 100);
-  const chip = weekChipLabel(week, races);
+  const chip = weekChipLabel(week, races, { withDate: true });
   // The plan's own target, never a blended-with-actual reference or a
   // zeroed actual (v1.1 review round 9 item 1) -- falls back to the
   // (unaffected, for a non-current week) reference figure when this week

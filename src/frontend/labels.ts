@@ -38,14 +38,31 @@ function taperOnly(race: RaceState) {
   return race.targets.taper.filter((t) => t.label !== 'race week');
 }
 
+// "Sat Oct 24" -- no comma, unlike toLocaleDateString's own weekday+month+
+// day formatting, which reads oddly stacked next to a race name on a Plan
+// row ("Race week · Puglia UTMB (Sat, Oct 24)").
+function fmtRaceWeekDate(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+  const monthDay = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${weekday} ${monthDay}`;
+}
+
 // The chip shown at the top of a week: "Build week", "Taper week 1 of 2",
 // "Recovery week", "Peak week" for a race's own Build-typed peak block, and
-// "Race day" (with the race's name) for the race week itself. Needs the
-// full races list to resolve a Taper week's position/count and a Peak
-// week's/Race week's name.
-export function weekChipLabel(week: WeekState, races: RaceState[]): { text: string; isRace: boolean } {
+// (for the race week itself) "Race day" -- the short, in-the-moment label
+// This Week's own chip and NextRaceCard want -- or, with
+// `withDate: true`, "Race week · <name> (<date>)" -- the Plan screen's own
+// row label (v1.1 review round 10 follow-up, final pre-1.0 pass item 4):
+// a list of weeks benefits from the date, where "today is race day" reads
+// oddly for a week further down the list. Needs the full races list to
+// resolve a Taper week's position/count and a Peak/Race week's name/date.
+export function weekChipLabel(week: WeekState, races: RaceState[], opts?: { withDate?: boolean }): { text: string; isRace: boolean } {
   if (week.type === 'RACE') {
-    return { text: week.raceName ? `Race day · ${week.raceName}` : 'Race day', isRace: true };
+    if (!opts?.withDate) return { text: week.raceName ? `Race day · ${week.raceName}` : 'Race day', isRace: true };
+    const race = week.raceId != null ? races.find((r) => r.id === week.raceId) : undefined;
+    const suffix = race ? ` (${fmtRaceWeekDate(race.date)})` : '';
+    return { text: week.raceName ? `Race week · ${week.raceName}${suffix}` : `Race week${suffix}`, isRace: true };
   }
   if (week.taperForRaceId != null) {
     const race = races.find((r) => r.id === week.taperForRaceId);

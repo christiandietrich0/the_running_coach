@@ -1,5 +1,10 @@
+// Floor, not round: a cap of e.g. 35.6km showing as "36" in one place
+// (feasibility's reachable projection) and "35" in another (corridor's own
+// cap, a slightly different figure) for what reads as "the same number" is
+// worse than consistently showing the conservative side of it everywhere
+// (v1.1 review round 10 follow-up, final pre-1.0 pass item 2).
 export function fmtKm(km: number): string {
-  return Math.round(km).toString();
+  return Math.floor(km).toString();
 }
 
 export function fmtM(m: number): string {

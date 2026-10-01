@@ -42,8 +42,8 @@ export function NextRaceCard({ races, today, currentWeek }: { races: RaceState[]
       {upcoming.feasibility?.status === 'LOCKED_IN' && upcoming.feasibility.lastBuildStatus != null && (
         <div class="race-meta">
           <span class="muted">
-            Build ended {FEASIBILITY_LABEL[upcoming.feasibility.lastBuildStatus]} ({fmtKm(upcoming.feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of{' '}
-            {fmtKm(upcoming.targets.peakLongRunKm)} km)
+            Build ended: {FEASIBILITY_LABEL[upcoming.feasibility.lastBuildStatus].toLowerCase()} (
+            {fmtKm(upcoming.feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of {fmtKm(upcoming.targets.peakLongRunKm)} km)
           </span>
         </div>
       )}

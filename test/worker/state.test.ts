@@ -300,12 +300,15 @@ function run(overrides: Partial<Run> & Pick<Run, 'id' | 'startLocal' | 'distance
   return { activityIds: [overrides.id], endLocal: overrides.startLocal, movingS: 3600, gainM: 0, lossM: 0, isRace: false, ...overrides };
 }
 
-// v1.1 review round 10 follow-up item 4, refined a second time: "Peak long
+// v1.1 review round 10 follow-up item 4, refined a third time: "Peak long
 // run done" is a display-only figure -- the raw, unclipped distance of the
-// longest non-race run since the last race or Recovery week -- never the
+// longest non-race run since the last training-block reset -- never the
 // clipped LR30 reference (which keeps doing its own job for caps/flags,
 // completely unchanged). The live report: the real Aug 29 48km run should
-// show as "Peak long run done: 48km (Aug 29)", not the clipped ~30km LR30.
+// show as "Peak long run done: 48km (Aug 29)", not the clipped ~30km LR30
+// -- and not Bukovina, an 84km trail race from Jul 24 that intervals.icu
+// never flagged as a race (it only exists as a past race in the races
+// table), which an earlier pass of this feature picked up instead.
 describe('peakLongRunDone', () => {
   it("picks the longest non-race run since the account's last race/Recovery week", () => {
     const dense = [denseEntry({ weekStart: '2026-07-20', isRaceWeek: false, weekType: 'BUILD' })];
@@ -314,7 +317,7 @@ describe('peakLongRunDone', () => {
       run({ id: 'b', startLocal: '2026-08-29T08:00:00', distanceM: 48000 }), // the real Aug 29 run
       run({ id: 'c', startLocal: '2026-09-12T08:00:00', distanceM: 36000 }),
     ];
-    const result = peakLongRunDone(dense, runs, '2026-09-28');
+    const result = peakLongRunDone(dense, runs, [], '2026-09-28');
     expect(result).toEqual({ km: 48, date: '2026-08-29' });
   });
 
@@ -324,7 +327,7 @@ describe('peakLongRunDone', () => {
       run({ id: 'a', startLocal: '2026-08-29T08:00:00', distanceM: 48000 }),
       run({ id: 'b', startLocal: '2026-09-20T08:00:00', distanceM: 50000 }), // a new best
     ];
-    expect(peakLongRunDone(dense, runs, '2026-09-28')).toEqual({ km: 50, date: '2026-09-20' });
+    expect(peakLongRunDone(dense, runs, [], '2026-09-28')).toEqual({ km: 50, date: '2026-09-20' });
   });
 
   it('never picks a race, however long, over a shorter training run', () => {
@@ -333,7 +336,7 @@ describe('peakLongRunDone', () => {
       run({ id: 'a', startLocal: '2026-08-29T08:00:00', distanceM: 48000 }),
       run({ id: 'b', startLocal: '2026-09-15T08:00:00', distanceM: 80000, isRace: true }),
     ];
-    expect(peakLongRunDone(dense, runs, '2026-09-28')).toEqual({ km: 48, date: '2026-08-29' });
+    expect(peakLongRunDone(dense, runs, [], '2026-09-28')).toEqual({ km: 48, date: '2026-08-29' });
   });
 
   it('resets at the last race or Recovery week, ignoring runs from before it', () => {
@@ -347,20 +350,40 @@ describe('peakLongRunDone', () => {
       run({ id: 'a', startLocal: '2026-07-25T08:00:00', distanceM: 60000 }), // before the race -- a different block
       run({ id: 'b', startLocal: '2026-09-05T08:00:00', distanceM: 20000 }), // this block's own longest so far
     ];
-    expect(peakLongRunDone(dense, runs, '2026-09-28')).toEqual({ km: 20, date: '2026-09-05' });
+    expect(peakLongRunDone(dense, runs, [], '2026-09-28')).toEqual({ km: 20, date: '2026-09-05' });
   });
 
   it('is null before any non-race run exists in the current block', () => {
     const dense = [denseEntry({ weekStart: '2026-08-10', isRaceWeek: true, weekType: 'RACE' })];
     const runs = [run({ id: 'a', startLocal: '2026-08-10T08:00:00', distanceM: 42000, isRace: true })];
-    expect(peakLongRunDone(dense, runs, '2026-09-28')).toBeNull();
+    expect(peakLongRunDone(dense, runs, [], '2026-09-28')).toBeNull();
+  });
+
+  // The exact live bug: Bukovina (84km, Jul 24) was never flagged as a
+  // race by intervals.icu (run.isRace stays false), but is recorded as a
+  // past race in the races table -- it must still be excluded, both from
+  // the candidate pool directly and as a reset boundary of its own.
+  it("excludes a long run on the date of a past race in the races table, even when intervals.icu never flagged it", () => {
+    const dense = [denseEntry({ weekStart: '2026-07-20', weekType: 'BUILD' })];
+    const runs = [
+      run({ id: 'bukovina', startLocal: '2026-07-24T08:00:00', distanceM: 84000, isRace: false }),
+      run({ id: 'a', startLocal: '2026-08-29T08:00:00', distanceM: 48000 }),
+      run({ id: 'b', startLocal: '2026-09-12T08:00:00', distanceM: 36000 }),
+    ];
+    const races = [race({ id: 9, name: 'Bukovina', date: '2026-07-24' })];
+    expect(peakLongRunDone(dense, runs, races, '2026-09-28')).toEqual({ km: 48, date: '2026-08-29' });
   });
 });
 
 describe('lastResetBoundary', () => {
-  it('is null with no race or Recovery week anywhere in history', () => {
+  it('is null with no plan and no race/Recovery/Limited week anywhere in history', () => {
+    const dense = [denseEntry({ weekStart: '2026-07-20', weekType: null }), denseEntry({ weekStart: '2026-07-27', weekType: null })];
+    expect(lastResetBoundary(dense, [], '2026-09-28')).toBeNull();
+  });
+
+  it('floors at the first week any plan exists for, with no race/Recovery/Limited week to override it', () => {
     const dense = [denseEntry({ weekStart: '2026-07-20', weekType: 'BUILD' }), denseEntry({ weekStart: '2026-07-27', weekType: 'BUILD' })];
-    expect(lastResetBoundary(dense, '2026-09-28')).toBeNull();
+    expect(lastResetBoundary(dense, [], '2026-09-28')).toBe('2026-07-20');
   });
 
   it("is that week's own Sunday, for the most recent qualifying week strictly before currentWeekStart", () => {
@@ -368,11 +391,28 @@ describe('lastResetBoundary', () => {
       denseEntry({ weekStart: '2026-08-10', isRaceWeek: true, weekType: 'RACE' }),
       denseEntry({ weekStart: '2026-08-17', weekType: 'RECOVERY' }),
     ];
-    expect(lastResetBoundary(dense, '2026-09-28')).toBe('2026-08-23'); // Recovery week's own Sunday, the later of the two
+    expect(lastResetBoundary(dense, [], '2026-09-28')).toBe('2026-08-23'); // Recovery week's own Sunday, the later of the two
+  });
+
+  it('also takes a Limited week as a reset', () => {
+    const dense = [denseEntry({ weekStart: '2026-07-20', weekType: 'BUILD' }), denseEntry({ weekStart: '2026-08-24', weekType: 'LIMITED' })];
+    expect(lastResetBoundary(dense, [], '2026-09-28')).toBe('2026-08-30');
+  });
+
+  it('takes a past race recorded only in the races table, even with no matching plan week', () => {
+    const dense = [denseEntry({ weekStart: '2026-07-20', weekType: 'BUILD' })];
+    const races = [race({ date: '2026-07-24' })];
+    expect(lastResetBoundary(dense, races, '2026-09-28')).toBe('2026-07-24');
+  });
+
+  it('takes whichever of the three candidates is latest', () => {
+    const dense = [denseEntry({ weekStart: '2026-07-20', weekType: 'BUILD' }), denseEntry({ weekStart: '2026-08-17', weekType: 'RECOVERY' })];
+    const races = [race({ date: '2026-07-24' })]; // earlier than the Recovery week's own Sunday
+    expect(lastResetBoundary(dense, races, '2026-09-28')).toBe('2026-08-23');
   });
 
   it('ignores a race/Recovery week that is the current week itself or later', () => {
     const dense = [denseEntry({ weekStart: '2026-09-28', isRaceWeek: true, weekType: 'RACE' })];
-    expect(lastResetBoundary(dense, '2026-09-28')).toBeNull();
+    expect(lastResetBoundary(dense, [], '2026-09-28')).toBeNull();
   });
 });
