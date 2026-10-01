@@ -1,4 +1,4 @@
-import { daysUntil, fmtKm, fmtM, fmtShortDate } from '../format';
+import { daysUntil, fmtKm, fmtKmCap, fmtM, fmtShortDate } from '../format';
 import { FEASIBILITY_LABEL } from '../labels';
 import type { RaceState, WeekState } from '../types';
 
@@ -68,8 +68,8 @@ export function RaceCard({
             </span>
             {feasibility.lastBuildStatus != null && (
               <span class="muted">
-                Build ended: {FEASIBILITY_LABEL[feasibility.lastBuildStatus].toLowerCase()} ({fmtKm(feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of{' '}
-                {fmtKm(targets.peakLongRunKm)} km)
+                Build ended: {FEASIBILITY_LABEL[feasibility.lastBuildStatus].toLowerCase()} (
+                {fmtKmCap(feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of {fmtKmCap(targets.peakLongRunKm)} km)
               </span>
             )}
           </div>
@@ -77,11 +77,11 @@ export function RaceCard({
           <div class="race-meta">
             <span class={`pill pill-${feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[feasibility.status]}</span>
             <span class="muted">
-              Long run reachable: {fmtKm(feasibility.maxReachableLongRunKm)} km (target {fmtKm(targets.peakLongRunKm)} km)
+              Long run reachable: {fmtKmCap(feasibility.maxReachableLongRunKm)} km (target {fmtKmCap(targets.peakLongRunKm)} km)
             </span>
             {cappedAtKm != null && cappedAtKm < targets.peakWeekEffortKm - 0.5 && (
               <span class="muted">
-                Peak week capped at {fmtKm(cappedAtKm)} km (race target {fmtKm(targets.peakWeekEffortKm)} km)
+                Peak week capped at {fmtKmCap(cappedAtKm)} km (race target {fmtKmCap(targets.peakWeekEffortKm)} km)
               </span>
             )}
           </div>
@@ -91,11 +91,11 @@ export function RaceCard({
         {feasibility?.status === 'LOCKED_IN' && <div class="stat-label">Targets</div>}
         <div class="race-target-row">
           <span class="muted">Peak long run</span>
-          <span>{fmtKm(targets.peakLongRunKm)} km</span>
+          <span>{fmtKmCap(targets.peakLongRunKm)} km</span>
         </div>
         <div class="race-target-row">
           <span class="muted">Peak week</span>
-          <span>{fmtKm(targets.peakWeekEffortKm)} effort-km</span>
+          <span>{fmtKmCap(targets.peakWeekEffortKm)} effort-km</span>
         </div>
         <div class="race-target-row">
           <span class="muted">Peak weekly D+</span>
@@ -126,7 +126,7 @@ export function RaceCard({
                   {t.label}
                   <span class="taper-row-date">{fmtShortDate(t.weekStart)}</span>
                 </span>
-                <span>{trainingKm != null ? `${fmtKm(trainingKm)} km + race` : week ? `${fmtKm(week.kmWeek)} km` : '--'}</span>
+                <span>{trainingKm != null ? `${fmtKmCap(trainingKm)} km + race` : week ? `${fmtKmCap(week.kmWeek)} km` : '--'}</span>
               </div>
             );
           })}

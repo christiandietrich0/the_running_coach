@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useState } from 'preact/hooks';
-import { fmtKm, fmtM } from '../format';
+import { fmtKm, fmtKmCap, fmtM } from '../format';
 import type { Settings, WeekState } from '../types';
 
 // The three progress bars from mechanics brief 8.1: weekly km, long run,
@@ -86,7 +86,7 @@ export function WeekNumbers({ week, settings }: { week: WeekState; settings: Set
         {lrCapped && (
           <>
             <Bar fraction={longestKm / corridor.lrMax} />
-            <div class="stat-cap-note">Long run: up to {fmtKm(corridor.lrMax)} km</div>
+            <div class="stat-cap-note">Long run: up to {fmtKmCap(corridor.lrMax)} km</div>
           </>
         )}
       </Stat>
@@ -117,7 +117,7 @@ export function WeekNumbers({ week, settings }: { week: WeekState; settings: Set
           <div class="details-panel">
             <div class="details-row">
               <span>Chronic average (C)</span>
-              <span>{refs.C > 0 ? `${fmtKm(refs.C)} km` : '--'}</span>
+              <span>{refs.C > 0 ? `${fmtKmCap(refs.C)} km` : '--'}</span>
             </div>
             <div class="details-row">
               <span>Weekly ratio (km / C)</span>
@@ -125,7 +125,7 @@ export function WeekNumbers({ week, settings }: { week: WeekState; settings: Set
             </div>
             <div class="details-row">
               <span>30-day longest run (LR30)</span>
-              <span>{refs.LR30 > 0 ? `${fmtKm(refs.LR30)} km` : '--'}</span>
+              <span>{refs.LR30 > 0 ? `${fmtKmCap(refs.LR30)} km` : '--'}</span>
             </div>
             <div class="details-row">
               <span>30-day max descent (D30)</span>
@@ -137,7 +137,7 @@ export function WeekNumbers({ week, settings }: { week: WeekState; settings: Set
             </div>
             <div class="details-row">
               <span>12-week average (M12)</span>
-              <span>{refs.M12 > 0 ? `${fmtKm(refs.M12)} km` : '--'}</span>
+              <span>{refs.M12 > 0 ? `${fmtKmCap(refs.M12)} km` : '--'}</span>
             </div>
           </div>
         )}

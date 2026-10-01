@@ -1,4 +1,4 @@
-import { fmtKm } from '../format';
+import { fmtKm, fmtKmCap } from '../format';
 import type { WeekState } from '../types';
 
 // The big "X to Y km left" / "Z km done" headline (v1.1 UI pass): the
@@ -23,7 +23,7 @@ export function WeekHeadline({ week }: { week: WeekState }) {
     return (
       <div class="card">
         <div class="big-number">
-          {fmtKm(g.kmLeftMin)} to {fmtKm(g.kmLeftMax)}
+          {fmtKmCap(g.kmLeftMin)} to {fmtKmCap(g.kmLeftMax)}
           <span class="big-number-unit">km left</span>
         </div>
         <div class="big-number-sub">{doneKm} km done</div>

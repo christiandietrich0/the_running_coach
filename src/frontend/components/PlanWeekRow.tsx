@@ -1,4 +1,4 @@
-import { fmtKm, fmtM } from '../format';
+import { fmtKm, fmtKmCap, fmtM } from '../format';
 import { weekChipLabel } from '../labels';
 import type { RaceState, WeekState } from '../types';
 
@@ -90,12 +90,12 @@ export function PlanWeekRow({
             <div class="plan-row-numbers plan-row-numbers-plan">
               {Number.isFinite(week.corridor.kmMax) ? (
                 <>
-                  Plan {fmtKm(week.corridor.kmMin)} to {fmtKm(week.corridor.kmMax)} km
+                  Plan {fmtKmCap(week.corridor.kmMin)} to {fmtKmCap(week.corridor.kmMax)} km
                 </>
               ) : (
-                <>Plan {fmtKm(plannedKm)} km</>
+                <>Plan {fmtKmCap(plannedKm)} km</>
               )}{' '}
-              · LR {fmtKm(week.plannedLongRunKm ?? 0)} km · D- {fmtM(week.plannedDminusM ?? 0)} m
+              · LR {fmtKmCap(week.plannedLongRunKm ?? 0)} km · D- {fmtM(week.plannedDminusM ?? 0)} m
             </div>
           </>
         ) : (
@@ -106,7 +106,7 @@ export function PlanWeekRow({
 
         {peakCapped && (
           <div class="plan-row-capped">
-            Peak week capped at {fmtKm(plannedKm)} km (race target {fmtKm(peakRace!.targets.peakWeekEffortKm)} km)
+            Peak week capped at {fmtKmCap(plannedKm)} km (race target {fmtKmCap(peakRace!.targets.peakWeekEffortKm)} km)
           </div>
         )}
       </div>

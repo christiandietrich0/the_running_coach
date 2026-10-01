@@ -1,9 +1,16 @@
-// Floor, not round: a cap of e.g. 35.6km showing as "36" in one place
-// (feasibility's reachable projection) and "35" in another (corridor's own
-// cap, a slightly different figure) for what reads as "the same number" is
-// worse than consistently showing the conservative side of it everywhere
-// (v1.1 review round 10 follow-up, final pre-1.0 pass item 2).
+// Actual/done distances round to the nearest whole km, same as ever (a
+// 28.6km run reads as "29km", the true nearest value).
 export function fmtKm(km: number): string {
+  return Math.round(km).toString();
+}
+
+// Caps, limits and targets floor instead: the conservative side of the
+// true figure, never claiming more room than there safely is -- and,
+// applied consistently everywhere a cap is shown, the fix for two
+// slightly different cap figures (e.g. feasibility's reachable projection
+// vs corridor's own cap) reading as two different whole numbers (v1.1
+// review round 10 follow-up, final pre-1.0 pass items 2-3).
+export function fmtKmCap(km: number): string {
   return Math.floor(km).toString();
 }
 

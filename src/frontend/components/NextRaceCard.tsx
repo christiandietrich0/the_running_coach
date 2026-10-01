@@ -1,4 +1,4 @@
-import { daysUntil, fmtKm, fmtShortDate } from '../format';
+import { daysUntil, fmtKm, fmtKmCap, fmtShortDate } from '../format';
 import { FEASIBILITY_LABEL, weekChipLabel } from '../labels';
 import type { RaceState, WeekState } from '../types';
 
@@ -43,7 +43,7 @@ export function NextRaceCard({ races, today, currentWeek }: { races: RaceState[]
         <div class="race-meta">
           <span class="muted">
             Build ended: {FEASIBILITY_LABEL[upcoming.feasibility.lastBuildStatus].toLowerCase()} (
-            {fmtKm(upcoming.feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of {fmtKm(upcoming.targets.peakLongRunKm)} km)
+            {fmtKmCap(upcoming.feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of {fmtKmCap(upcoming.targets.peakLongRunKm)} km)
           </span>
         </div>
       )}

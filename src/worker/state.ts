@@ -240,11 +240,20 @@ export function raceFeasibilityExtra(weeks: WeekStateDTO[], currentWeekStart: st
       (currentWeekDto.type === 'RACE' && currentWeekDto.raceId === race.id));
 
   // The last genuine Build week for this race (the week right before
-  // Peak) and what feasibility() said then, from that week's own already-
-  // computed refs -- so the UI can still show "Build ended Tight (35 of
-  // 47km)" once locked in, instead of just losing that information. No
-  // Peak week (e.g. a C-priority race, which never tapers) means no such
-  // reading.
+  // Peak) and what feasibility() said then, so the UI can still show
+  // "Build ended Tight (35 of 47km)" once locked in, instead of just
+  // losing that information. The reachable-long-run figure is the Peak
+  // week's own corridor.lrMax -- the real, already-generated cap
+  // suggestPlan() used for it -- not a second, independent feasibility()
+  // growth projection: the two are close but not always identical, and
+  // showing two slightly different numbers for "the long-run cap" in two
+  // places (here vs the Peak week's own This Week screen, once it
+  // becomes current) was exactly the round 10 follow-up item 2 report
+  // (v1.1 review round 10 follow-up, final pre-1.0 pass item 2). The
+  // status label alone still comes from feasibility() at that week, since
+  // corridor.lrMax carries no Tight/Not-reachable/Feasible read of its
+  // own. No Peak week (e.g. a C-priority race, which never tapers) means
+  // no such reading.
   const peakWeek = weeks.find((w) => w.peakForRaceId === race.id);
   let lastBuild: FeasibilityExtra['lastBuild'];
   if (peakWeek) {
@@ -254,42 +263,39 @@ export function raceFeasibilityExtra(weeks: WeekStateDTO[], currentWeekStart: st
       const raceMonday = mondayOf(race.date);
       const lastBuildWeeksAvailable = Math.floor(diffDays(raceMonday, lastBuildWeekStart) / 7) + 1;
       const lastBuildFeas = feasibility(race, lastBuildWeek.refs.LR30, lastBuildWeek.refs.C, lastBuildWeeksAvailable, settings);
-      lastBuild = { status: lastBuildFeas.status, maxReachableLongRunKm: lastBuildFeas.maxReachableLongRunKm };
+      const maxReachableLongRunKm = Number.isFinite(peakWeek.corridor.lrMax) ? peakWeek.corridor.lrMax : lastBuildFeas.maxReachableLongRunKm;
+      lastBuild = { status: lastBuildFeas.status, maxReachableLongRunKm };
     }
   }
 
   return { lockedInByWeekType, lastBuild };
 }
 
-// The last training-block reset, as the later of: the account's last race
-// (whether intervals.icu flagged the activity itself as a race, or it's
-// only recorded as a race in the races table -- e.g. a past race added
-// purely as a historical record, like Bukovina, an 84km trail race from
-// Jul 24 that intervals.icu never flagged and that otherwise got counted
-// as "Peak long run done"), the account's last Recovery or Limited week,
-// or the first week any plan exists for at all (never reach back before
-// there was a training block to speak of). Everything from the day after
-// counts toward peakLongRunDone() below. Null only when none of the three
-// apply anywhere in history -- count from the very start of it.
-export function lastResetBoundary(dense: TimelinePoint[], races: Race[], currentWeekStart: string): string | null {
-  const boundaries: string[] = [];
+// How far back peakLongRunDone() will ever look when there's no more
+// recent race to anchor to -- an account with no races yet, or whose last
+// one was a long time ago, shouldn't surface its all-time longest run as
+// if it were part of the current build.
+const PEAK_LONG_RUN_LOOKBACK_WEEKS = 16;
 
-  const pastRaceDates = races.map((r) => r.date).filter((d) => d < currentWeekStart);
-  if (pastRaceDates.length > 0) boundaries.push(pastRaceDates.reduce((a, b) => (a > b ? a : b)));
-
-  for (let i = dense.length - 1; i >= 0; i--) {
-    const w = dense[i];
-    if (w.weekStart >= currentWeekStart) continue;
-    if (w.isRaceWeek || w.weekType === 'RECOVERY' || w.weekType === 'LIMITED') {
-      boundaries.push(addDays(w.weekStart, 6));
-      break;
-    }
-  }
-
-  const planStart = dense.find((w) => w.weekType != null && w.weekStart < currentWeekStart)?.weekStart;
-  if (planStart != null) boundaries.push(planStart);
-
-  return boundaries.length > 0 ? boundaries.reduce((a, b) => (a > b ? a : b)) : null;
+// The window peakLongRunDone() searches: since the account's last race --
+// flagged by intervals.icu on the activity itself, or recorded as a race
+// in the races table (even when intervals.icu never flagged it, e.g. an
+// old trail race entered purely as a historical record, like Bukovina, an
+// 84km run from Jul 24) -- excluding the race day itself, capped to
+// PEAK_LONG_RUN_LOOKBACK_WEEKS weeks back. Simplified from an earlier
+// 3-way version (also stopping at the last Recovery/Limited week, or the
+// first week any plan exists for) after that last condition wrongly
+// excluded a real Aug 29 long run on a live account whose plan_weeks
+// history didn't happen to reach back that far -- "since the last race"
+// is the one rule that actually matches what the label promises (v1.1
+// review round 10 follow-up, final pre-1.0 pass, simplified).
+export function lastResetBoundary(runs: Run[], races: Race[], currentWeekStart: string): string {
+  const lookbackFloor = addDays(currentWeekStart, -7 * PEAK_LONG_RUN_LOOKBACK_WEEKS);
+  const raceDates = [...runs.filter((r) => r.isRace).map((r) => r.startLocal.slice(0, 10)), ...races.map((r) => r.date)].filter(
+    (d) => d < currentWeekStart,
+  );
+  const lastRaceDate = raceDates.length > 0 ? raceDates.reduce((a, b) => (a > b ? a : b)) : null;
+  return lastRaceDate != null && lastRaceDate > lookbackFloor ? lastRaceDate : lookbackFloor;
 }
 
 // Display only, never fed into any cap/flag/reference computation (see
@@ -303,12 +309,10 @@ export function lastResetBoundary(dense: TimelinePoint[], races: Race[], current
 // override), and separately any run whose date matches a race recorded
 // in the races table -- a race can clear the first without the second,
 // as Bukovina did.
-export function peakLongRunDone(dense: TimelinePoint[], runs: Run[], races: Race[], currentWeekStart: string): { km: number; date: string } | null {
-  const boundary = lastResetBoundary(dense, races, currentWeekStart);
+export function peakLongRunDone(runs: Run[], races: Race[], currentWeekStart: string): { km: number; date: string } | null {
+  const boundary = lastResetBoundary(runs, races, currentWeekStart);
   const raceDates = new Set(races.map((r) => r.date));
-  const candidates = runs.filter(
-    (r) => !r.isRace && !raceDates.has(r.startLocal.slice(0, 10)) && (boundary == null || r.startLocal.slice(0, 10) > boundary),
-  );
+  const candidates = runs.filter((r) => !r.isRace && !raceDates.has(r.startLocal.slice(0, 10)) && r.startLocal.slice(0, 10) > boundary);
   if (candidates.length === 0) return null;
   const longest = candidates.reduce((max, r) => (r.distanceM > max.distanceM ? r : max));
   return { km: longest.distanceM / 1000, date: longest.startLocal.slice(0, 10) };
@@ -520,7 +524,7 @@ export async function buildState(env: Env): Promise<StateResponse> {
   // Athlete-wide, not per-race: the same "since the last race or Recovery
   // week" boundary applies whichever upcoming race's card happens to show
   // it (RaceStateDTO's own comment).
-  const peakLongRunDoneReading = peakLongRunDone(dense, runs, races, currentWeekStart);
+  const peakLongRunDoneReading = peakLongRunDone(runs, races, currentWeekStart);
 
   const raceDtos: RaceStateDTO[] = races.map((race) => {
     const targets = raceTargets(race, settings);
