@@ -13,6 +13,10 @@ export interface Env {
   ICU_API_KEY?: string;
   ICU_ATHLETE_ID?: string;
   CF_VERSION_METADATA: { id: string; tag: string };
+  // The git short hash baked in at deploy time via `wrangler deploy --var`
+  // (package.json's deploy script) -- see health.ts's own comment for why
+  // this exists alongside CF_VERSION_METADATA and __BUILD_VERSION__.
+  WORKER_BUILD?: string;
 }
 
 export default {
@@ -21,7 +25,7 @@ export default {
     const { pathname } = url;
     const { method } = request;
 
-    if (pathname === '/api/health') return handleHealth();
+    if (pathname === '/api/health') return handleHealth(env);
     if (pathname === '/api/sync' && method === 'POST') return handleSync(request, env);
     if (pathname === '/api/state' && method === 'GET') return handleState(request, env);
     if (pathname === '/api/settings' && method === 'PUT') return handlePutSettings(request, env);

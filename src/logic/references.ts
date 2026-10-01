@@ -85,25 +85,37 @@ function clippedContribution(value: number, runningMax: number, capFactor: numbe
 //
 // Each week's own clipped contribution is computed by walking the *whole*
 // history from week 0 up to (not including) idx, not just the last
-// `windowWeeks` weeks: re-bootstrapping runningMax at 0 from whatever
-// happens to be the oldest week still inside a short, moving window made
-// a fixed week's own clipped value silently change from one query to the
-// next as that boundary slid past older weeks (a real spike found via the
-// backtest script: LR30 35.0 -> 18.8 -> 28.9 across three consecutive
-// weeks, though the run that set 35.0 was still only days old and nowhere
-// near ageing out of its 30-day window). Walking from the true start
-// means a given week's own contribution is a stable property of the
-// history up to it, and DW4 can only fall when the week that set it
-// actually leaves the trailing `windowWeeks` window -- never as an
-// artefact of recomputing the clip chain fresh each time (v1.1 review
-// round 10 item 6).
+// `windowWeeks` weeks -- re-bootstrapping a SHARED runningMax at 0 from
+// whatever happens to be the oldest week still inside a short, moving
+// window made a fixed week's own clipped value silently change from one
+// query to the next as that boundary slid past older weeks (a real spike
+// found via the backtest script: LR30 35.0 -> 18.8 -> 28.9 across three
+// consecutive weeks, though the run that set 35.0 was still only days old
+// and nowhere near ageing out of its 30-day window).
+//
+// But the ceiling each week clips against is still only the max of
+// *already-fixed* contributions from the `windowWeeks` immediately before
+// *that week itself* -- not a single running max shared across all of
+// history. A single shared, never-decaying runningMax (the original v1.1
+// review round 10 fix) turned out to have its own, worse bug: one big
+// week from over a year back permanently set the ceiling high enough that
+// every real week since then -- including the account's own actual
+// Sep 28 2026 live report (D30 showing the raw 1,299m run unclipped,
+// because a July 2026 week had long since pushed the all-time ceiling
+// past 1,758m) -- sailed through completely unclipped forever, which
+// defeats the entire point of a *30-day* reference. Each week's own
+// lookback below is anchored to its own date (not to whatever week the
+// caller happens to be asking about), so it's exactly as stable/
+// oscillation-free as the shared-runningMax version -- it just forgets a
+// ceiling once the week that set it is more than `windowWeeks` in the
+// past, the same way DW4 itself is only ever a trailing window, never an
+// all-time max (v1.1 review round 10 follow-up, Sep 28 bug report).
 function computeDW4(dense: TimelinePoint[], idx: number, windowWeeks: number, capFactor: number, actualWeekStarts: Set<string>): number {
-  let runningMax = 0;
   const contributions: number[] = [];
   for (let i = 0; i < idx; i++) {
     const isPlanned = !actualWeekStarts.has(dense[i].weekStart);
-    const contribution = isPlanned ? dense[i].dminusWeek : clippedContribution(dense[i].dminusWeek, runningMax, capFactor);
-    if (contribution > runningMax) runningMax = contribution;
+    const ceiling = Math.max(0, ...contributions.slice(Math.max(0, i - windowWeeks), i));
+    const contribution = isPlanned ? dense[i].dminusWeek : clippedContribution(dense[i].dminusWeek, ceiling, capFactor);
     contributions.push(contribution);
   }
 
@@ -184,20 +196,34 @@ function longRunPoints(dense: TimelinePoint[], actualRuns: Run[]): LongRunPoint[
 //
 // Every point's own clipped contribution is computed by walking the
 // *entire* history up to `asOf`, not just the 30-day window: re-bootstrapping
-// runningMax at 0 from whatever happens to be the oldest point still inside
-// a short, moving window made a single fixed run's own clipped value
-// silently drift from one week's query to the next, as the window's start
-// boundary slid past older points and changed which one got to be the
+// a SHARED runningMax at 0 from whatever happens to be the oldest point
+// still inside a short, moving window made a single fixed run's own clipped
+// value silently drift from one week's query to the next, as the window's
+// start boundary slid past older points and changed which one got to be the
 // unclipped "first" point -- confirmed via the backtest script as a real
 // spike-then-crash (LR30 35.0 -> 18.8 -> 28.9 across three consecutive
 // weeks, days apart, with the run that set 35.0 nowhere near ageing out of
-// its own 30-day window). Walking from the true start of history means a
-// given point's own contribution is a stable property of everything before
-// it, and the window is only used at the very end, to pick the largest
-// *already-fixed* contribution among points still within it -- so LR30/D30
-// can only fall when the point that set them actually leaves the 30-day
-// window, never as an artefact of recomputing the clip chain fresh each
-// time (v1.1 review round 10 item 6). Processed oldest-first so growth is
+// its own 30-day window).
+//
+// But the ceiling a given point clips against is still only the max of
+// *already-fixed* contributions from the `windowDays` immediately before
+// *that point itself* -- not a single running max shared across all of
+// history. A single shared, never-decaying runningMax (the original v1.1
+// review round 10 fix) turned out to have its own, worse bug: one huge
+// descent from over a year back permanently set the ceiling high enough
+// (confirmed against this account's real synced history) that essentially
+// every real run since then -- including the live Sep 27 2026 bug report
+// (D30 showing the raw 1,299m run completely unclipped, "Up to 1,559m in
+// one run") -- sailed straight through, because the account's own July
+// 2026 long run had long since pushed the all-time ceiling past 1,758m,
+// comfortably above 1,299m x 1.2. That defeats the entire point of a
+// *30-day* reference. Each point's own lookback below is anchored to its
+// own date (not to whatever week the caller happens to be asking about),
+// so it's exactly as stable/oscillation-free as the shared-runningMax
+// version -- it just forgets a ceiling once the point that set it is more
+// than `windowDays` in the past, the same way LR30/D30 themselves are only
+// ever a trailing 30-day window, never an all-time max (v1.1 review round
+// 10 follow-up, Sep 28 bug report). Processed oldest-first so growth is
 // judged in the order it actually happened: an actual run's contribution is
 // clipped to capFactor x the reference as it stood right before it (see
 // clippedContribution above), never excluded outright. capFactor is the
@@ -209,12 +235,12 @@ function maxInWindow(points: LongRunPoint[], asOf: string, windowDays: number, p
   const windowStart = addDays(asOf, -windowDays);
   const sorted = points.filter((p) => p.date < asOf).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  let runningMax = 0;
   const contributions: { date: string; value: number }[] = [];
   for (const p of sorted) {
     const v = pick(p);
-    const contribution = p.isPlanned ? v : clippedContribution(v, runningMax, capFactor);
-    if (contribution > runningMax) runningMax = contribution;
+    const lookbackStart = addDays(p.date, -windowDays);
+    const ceiling = Math.max(0, ...contributions.filter((c) => c.date >= lookbackStart).map((c) => c.value));
+    const contribution = p.isPlanned ? v : clippedContribution(v, ceiling, capFactor);
     contributions.push({ date: p.date, value: contribution });
   }
 

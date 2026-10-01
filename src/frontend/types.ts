@@ -178,6 +178,7 @@ export interface StateResponse {
   checkinNeeded: boolean;
   lastPlanUpdateAt: string | null;
   injuryRisk: InjuryRisk;
+  workerBuild: string | null;
 }
 
 // Bodies for the Phase 4 write endpoints (src/worker/validation.ts).

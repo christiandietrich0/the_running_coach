@@ -326,19 +326,31 @@ describe('references: red runs/weeks are clipped, not dropped, in LR30/D30/DW4',
 
   // v1.1 review round 10 follow-up item 1: a live report that D30/DW4
   // weren't actually clipping ("Up to 1,559m in one run", i.e. 1.2x the
-  // raw 1,299m Sep 27 run, unclipped) turned out not to be an algorithm
-  // bug -- this fixture is real single-run descent-loss data pulled from
-  // this account's own synced history (Aug 1 - Sep 25), which establishes
-  // a genuine ~270-300m baseline through ordinary clipped growth, exactly
-  // like a live account would. Appending the Sep 27 (1,299m) and Sep 30
-  // (Wed, 15.2km) runs from the bug report and computing D30 the same way
-  // buildState() does reproduces the account's own expected numbers
-  // (~363m D30, ~430m single-run cap) almost exactly, confirming the
-  // clip *mechanism* itself is correct; the live discrepancy is most
-  // likely a stale cached /api/state response (addressed separately by
-  // the no-store header on handleState).
-  it("clips a real reckless single-run descent against this account's own recent history, not the raw value", () => {
+  // raw 1,299m Sep 27 run, unclipped) was first (wrongly) chalked up to a
+  // stale cached /api/state response. It wasn't: exporting this account's
+  // *complete* real synced history (back to Aug 2025, via `wrangler d1
+  // export`) and running references() against all of it reproduced the
+  // live bug exactly -- D30 1,299 (raw), dminusRunMax 1,558.8, dminusWeekMax
+  // 1,973.8, matching the bug report to the metre. The real cause: two
+  // genuine real ultra-distance trail runs from May 9 and Jul 24 2026 (real
+  // distance/loss figures below) had, months earlier, pushed the old
+  // all-time-shared runningMax up past 1,758m through perfectly ordinary
+  // clipped growth. Once that ceiling existed, every later run -- including
+  // this Sep 27 one -- was comfortably under 1.2x1,758m and sailed through
+  // completely unclipped, forever, even though both ultras were by then
+  // long outside any 30-day window. Fixed in maxInWindow()/computeDW4()
+  // above: the ceiling a point clips against is now only the max of
+  // already-fixed contributions from the `windowDays`/`windowWeeks`
+  // immediately before *that point's own date*, not a single max shared
+  // across all of history, so an outlier more than a window-width in the
+  // past can no longer hand out a permanent pass. This fixture is the
+  // account's own real data (Aug 1 - Sep 25, plus the two real ultras and
+  // the Sep 27/Sep 30 runs from the bug report); the expected numbers below
+  // are what references()/corridor() actually compute against it today.
+  it("clips a real reckless single-run descent against this account's own recent history, not the raw value, even with a huge outlier months in the past", () => {
     const history: [string, number, number][] = [
+      ['2026-05-09T06:00:45', 74036, 4142.1], // real ultra, 141 days before Sep 27 -- well outside any 30-day window
+      ['2026-07-24T22:59:29', 84162, 4876.6], // real ultra, 65 days before Sep 27 -- also well outside
       ['2026-08-01T12:52:47', 7277, 101.1],
       ['2026-08-04T11:19:36', 13115, 296.1],
       ['2026-08-10T09:45:15', 24860, 154.8],
@@ -375,11 +387,27 @@ describe('references: red runs/weeks are clipped, not dropped, in LR30/D30/DW4',
     const dense = buildDenseTimeline([...aggMap.values()], []);
 
     const refs = references({ weekStart: '2026-09-28', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refs.D30).toBeGreaterThan(300); // real clipped growth, not stuck at the old baseline
-    expect(refs.D30).toBeLessThan(500); // clipped, nowhere near the raw 1,299m
+    expect(refs.D30).toBeCloseTo(363.48, 0); // clipped to ~1.2x the real ~302.9m pre-run baseline, not the raw 1,299m
+    expect(refs.DW4).toBeCloseTo(875.03, 0);
     const dminusRunMax = DEFAULTS.singleRunDminusCapFactor * refs.D30;
-    expect(dminusRunMax).toBeGreaterThan(380);
-    expect(dminusRunMax).toBeLessThan(480); // matches the account's own expected "~430m" cap, not the reported 1,559m
+    const dminusWeekMax = DEFAULTS.weeklyDminusCapFactor * refs.DW4;
+    expect(dminusRunMax).toBeCloseTo(436.18, 0); // not the reported 1,559m
+    expect(dminusWeekMax).toBeCloseTo(1137.54, 0); // not the reported 1,974m
+  });
+
+  // The focused version of the fixture above, without the full account
+  // history: a single old outlier, well outside the 30-day window, must
+  // never hand out a permanent unclipped pass to everything after it.
+  it('an outlier more than windowDays in the past does not suppress clipping of a new one', () => {
+    const runs = mergeRuns([
+      activity('ancient-ultra', '2026-01-01T08:00:00', 70000, 4000), // 89 days before the week below
+      activity('baseline', '2026-03-01T08:00:00', 15000, 300),
+      activity('reckless', '2026-03-08T08:00:00', 15000, 1300), // would be well under 1.2x4000 if the ancient ultra still counted
+    ]);
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+    const refs = references({ weekStart: '2026-03-09', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refs.D30).toBeCloseTo(DEFAULTS.singleRunDminusCapFactor * 300, 0); // clipped to 1.2x300=360, not 1300 and not 4000's cap
   });
 });
 

@@ -201,6 +201,10 @@ export interface StateResponse {
   // This week's load-based injury risk read (v1.1 review round 10 Part
   // 2) -- see injuryRisk.ts's own header for what it is and isn't.
   injuryRisk: InjuryRisk;
+  // The deployed Worker script's own git short hash (health.ts's own
+  // comment explains why this is separate from the frontend's
+  // __BUILD_VERSION__), null if WORKER_BUILD wasn't passed at deploy time.
+  workerBuild: string | null;
 }
 
 function toRunDto(run: Run): RunDTO {
@@ -434,5 +438,16 @@ export async function buildState(env: Env): Promise<StateResponse> {
     settings,
   );
 
-  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded, lastPlanUpdateAt, injuryRisk };
+  return {
+    today,
+    currentWeekStart,
+    settings,
+    weeks,
+    races: raceDtos,
+    currentWeekRuns,
+    checkinNeeded,
+    lastPlanUpdateAt,
+    injuryRisk,
+    workerBuild: env.WORKER_BUILD ?? null,
+  };
 }

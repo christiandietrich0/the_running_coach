@@ -68,6 +68,11 @@ export function SettingsForm({ state, onStateChange }: { state: StateResponse; o
 
         <div class="settings-build-info">
           <span>Build {__BUILD_VERSION__}</span>
+          {/* The Worker script's own git hash, independent of the frontend
+              bundle above -- the two are separate deploy artefacts, and a
+              mismatch here (not just a stale frontend hash) is the proof
+              that a deploy didn't actually land the Worker's own logic. */}
+          <span> · Worker {state.workerBuild ?? 'unknown'}</span>
         </div>
       </div>
 
