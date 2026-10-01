@@ -93,16 +93,19 @@ export function feasibility(race: Race, currentLR30: number, currentC: number, w
   const budget = Math.max(0, weeksAvailable - taperWeeksNeeded);
 
   // Always computed now (v1.1 review round 8 item 2), not just when
-  // NOT_REACHABLE, so the reason line can always report it. A shortfall
-  // under 15% on the long run (compared unrounded, so exactly 85% counts)
-  // is close enough to call Tight rather than Not-reachable, whichever
-  // dimension is actually driving the NOT_REACHABLE verdict -- round 8
-  // gated this on the long run being the binding dimension, but that
-  // qualifier was hiding cases like 40 vs a 47km target (85.1%) behind a
-  // volume shortfall that wasn't actually the problem (v1.1 review round
-  // 9 item 3).
+  // NOT_REACHABLE, so the reason line can always report it. A shortfall on
+  // the long run within settings.feasibilityTightReachableFactor of the
+  // target (compared unrounded, so exactly the threshold counts) is close
+  // enough to call Tight rather than Not-reachable, whichever dimension is
+  // actually driving the NOT_REACHABLE verdict -- round 8 gated this on
+  // the long run being the binding dimension, but that qualifier was
+  // hiding cases like 40 vs a 47km target (85.1%) behind a volume
+  // shortfall that wasn't actually the problem (v1.1 review round 9 item
+  // 3). The threshold itself was a fixed 85% until a 39.6 vs 47km case
+  // (84.3%) stayed Not-reachable under it; now a configurable setting,
+  // defaulted to 80% (v1.1 review round 10 follow-up item 3).
   const maxReachableLongRunKm = reachableAt(currentLR30, budget, settings);
-  if (status === 'NOT_REACHABLE' && targets.peakLongRunKm > 0 && maxReachableLongRunKm >= 0.85 * targets.peakLongRunKm) {
+  if (status === 'NOT_REACHABLE' && targets.peakLongRunKm > 0 && maxReachableLongRunKm >= settings.feasibilityTightReachableFactor * targets.peakLongRunKm) {
     status = 'TIGHT';
   }
 

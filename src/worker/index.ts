@@ -12,6 +12,7 @@ export interface Env {
   ASSETS: Fetcher;
   ICU_API_KEY?: string;
   ICU_ATHLETE_ID?: string;
+  CF_VERSION_METADATA: { id: string; tag: string };
 }
 
 export default {

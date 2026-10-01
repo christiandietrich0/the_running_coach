@@ -56,7 +56,12 @@ export interface ChartRow {
 
 // A race's own Build-typed peak week reads "P", not "B" -- same
 // distinction weekChipLabel() in labels.ts draws for the chip text, just
-// condensed to a single letter here.
+// condensed to a single letter here. Each week column is only ~20px wide
+// (PX_PER_WEEK in Chart.tsx), so every marker here is a single character
+// except Recovery -- "Rec" routinely overflowed into neighbouring columns
+// (read as "Rec Rec" when two sat close together, or cut off mid-word at
+// the chart's own right edge), fixed by shortening it to two characters,
+// same as every other type (v1.1 review round 10 follow-up item 4).
 const WEEK_TYPE_LETTER: Record<WeekType, string> = {
   BUILD: 'B',
   HOLD: 'H',
@@ -64,7 +69,7 @@ const WEEK_TYPE_LETTER: Record<WeekType, string> = {
   TAPER: 'T',
   RACE: 'R',
   LIMITED: 'L',
-  RECOVERY: 'Rec',
+  RECOVERY: 'Rc',
 };
 
 function weekTypeLetter(w: WeekState): string {

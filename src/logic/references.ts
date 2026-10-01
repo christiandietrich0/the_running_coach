@@ -111,8 +111,11 @@ function computeDW4(dense: TimelinePoint[], idx: number, windowWeeks: number, ca
   return windowContribs.length > 0 ? Math.max(...windowContribs) : 0;
 }
 
-// M12: 12-week mean of km_week, used only for the detraining check (3.6).
-function computeM12(dense: TimelinePoint[], idx: number, windowWeeks: number): number {
+// Trailing mean km_week of the `windowWeeks` weeks before idx. M12 (3.6,
+// detraining check) was this function's only use until injuryRisk.ts's
+// 4-week-mean-vs-10-week-average trend also needed the same trailing mean
+// at two different window sizes (v1.1 review round 10 follow-up, Part 2).
+function computeMeanKmWindow(dense: TimelinePoint[], idx: number, windowWeeks: number): number {
   const slice = dense.slice(Math.max(0, idx - windowWeeks), idx);
   if (slice.length === 0) return 0;
   return slice.reduce((s, w) => s + w.kmWeek, 0) / slice.length;
@@ -236,7 +239,9 @@ export function references(input: ReferencesInput, settings: Settings): Referenc
 
   const { C, weeksUsed } = computeC(denseTimeline, idx, settings.chronicWindowWeeks);
   const DW4 = computeDW4(denseTimeline, idx, settings.chronicWindowWeeks, settings.weeklyDminusCapFactor, actualWeekStarts);
-  const M12 = computeM12(denseTimeline, idx, 12);
+  const M12 = computeMeanKmWindow(denseTimeline, idx, 12);
+  const mean4Week = computeMeanKmWindow(denseTimeline, idx, 4);
+  const mean10Week = computeMeanKmWindow(denseTimeline, idx, 10);
   const buildMean = computeBuildMean(denseTimeline, idx, settings.downCadenceBuildWeeks);
 
   // LR30/D30 are evaluated as of this week's Sunday, not its Monday: a
@@ -249,5 +254,5 @@ export function references(input: ReferencesInput, settings: Settings): Referenc
   const LR30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.km, settings.longRunCapFactor);
   const D30 = maxInWindow(points, asOf, settings.lr30WindowDays, (p) => p.lossM, settings.singleRunDminusCapFactor);
 
-  return { C, LR30, D30, DW4, M12, buildMean, weeksUsedForC: weeksUsed };
+  return { C, LR30, D30, DW4, M12, mean4Week, mean10Week, buildMean, weeksUsedForC: weeksUsed };
 }

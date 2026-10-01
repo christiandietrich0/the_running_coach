@@ -897,6 +897,91 @@ body {
   background: var(--violet);
 }
 
+/* Injury risk card (This Week, top of screen) and its details sheet */
+
+.injury-risk-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  background: var(--card-bg);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.injury-risk-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.injury-risk-label {
+  font-weight: 600;
+}
+
+.injury-risk-caret {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.injury-risk-why {
+  margin-top: 4px;
+  margin-left: 18px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.injury-risk-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.injury-risk-summary-label {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.injury-risk-disclaimer {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-bottom: var(--space-4);
+}
+
+.injury-risk-row {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+
+.injury-risk-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.injury-risk-override {
+  color: var(--red);
+}
+
+.injury-risk-row-reason {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.injury-risk-row-weight {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--muted-2);
+}
+
 .pill-race {
   border-color: var(--violet);
 }

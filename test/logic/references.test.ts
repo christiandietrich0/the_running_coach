@@ -323,6 +323,64 @@ describe('references: red runs/weeks are clipped, not dropped, in LR30/D30/DW4',
     // clipped contribution across the window is 'a' itself, 20km.
     expect(refs.LR30).toBeCloseTo(20);
   });
+
+  // v1.1 review round 10 follow-up item 1: a live report that D30/DW4
+  // weren't actually clipping ("Up to 1,559m in one run", i.e. 1.2x the
+  // raw 1,299m Sep 27 run, unclipped) turned out not to be an algorithm
+  // bug -- this fixture is real single-run descent-loss data pulled from
+  // this account's own synced history (Aug 1 - Sep 25), which establishes
+  // a genuine ~270-300m baseline through ordinary clipped growth, exactly
+  // like a live account would. Appending the Sep 27 (1,299m) and Sep 30
+  // (Wed, 15.2km) runs from the bug report and computing D30 the same way
+  // buildState() does reproduces the account's own expected numbers
+  // (~363m D30, ~430m single-run cap) almost exactly, confirming the
+  // clip *mechanism* itself is correct; the live discrepancy is most
+  // likely a stale cached /api/state response (addressed separately by
+  // the no-store header on handleState).
+  it("clips a real reckless single-run descent against this account's own recent history, not the raw value", () => {
+    const history: [string, number, number][] = [
+      ['2026-08-01T12:52:47', 7277, 101.1],
+      ['2026-08-04T11:19:36', 13115, 296.1],
+      ['2026-08-10T09:45:15', 24860, 154.8],
+      ['2026-08-13T06:34:00', 12024, 96.4],
+      ['2026-08-14T06:01:25', 16093, 130.5],
+      ['2026-08-15T09:53:12', 7219, 56.0],
+      ['2026-08-16T08:20:04', 21234, 1054.2],
+      ['2026-08-20T16:06:43', 10062, 73.3],
+      ['2026-08-21T11:00:23', 15366, 89.1],
+      ['2026-08-24T15:23:10', 11827, 101.8],
+      ['2026-08-25T12:32:35', 8285, 110.4],
+      ['2026-08-27T16:50:30', 15008, 91.4],
+      ['2026-08-28T16:45:41', 10012, 66.6],
+      ['2026-08-29T08:28:20', 48077, 302.9],
+      ['2026-09-01T17:10:25', 21006, 88.5],
+      ['2026-09-02T16:42:20', 15469, 89.3],
+      ['2026-09-03T16:07:40', 17174, 117.1],
+      ['2026-09-06T08:45:23', 10552, 57.8],
+      ['2026-09-09T16:36:15', 10584, 72.9],
+      ['2026-09-11T15:31:54', 10221, 228.5],
+      ['2026-09-12T08:22:29', 36030, 282.9],
+      ['2026-09-14T11:51:10', 10049, 97.7],
+      ['2026-09-15T17:34:39', 13234, 129.4],
+      ['2026-09-16T17:18:14', 18090, 228.3],
+      ['2026-09-19T10:13:40', 12935, 87.3],
+      ['2026-09-22T11:54:33', 10072, 64.3],
+      ['2026-09-23T17:02:53', 14287, 79.0],
+      ['2026-09-25T15:41:11', 13464, 76.0],
+      ['2026-09-27T08:00:00', 25000, 1299], // the reckless run from the bug report
+      ['2026-09-30T08:00:00', 15200, 55], // the Wed run from the bug report
+    ];
+    const runs = mergeRuns(history.map(([d, dist, loss], i) => activity(`h${i}`, d, dist, loss)));
+    const aggMap = weeklyAggregates(runs, DEFAULTS);
+    const dense = buildDenseTimeline([...aggMap.values()], []);
+
+    const refs = references({ weekStart: '2026-09-28', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
+    expect(refs.D30).toBeGreaterThan(300); // real clipped growth, not stuck at the old baseline
+    expect(refs.D30).toBeLessThan(500); // clipped, nowhere near the raw 1,299m
+    const dminusRunMax = DEFAULTS.singleRunDminusCapFactor * refs.D30;
+    expect(dminusRunMax).toBeGreaterThan(380);
+    expect(dminusRunMax).toBeLessThan(480); // matches the account's own expected "~430m" cap, not the reported 1,559m
+  });
 });
 
 describe('references: buildMean', () => {

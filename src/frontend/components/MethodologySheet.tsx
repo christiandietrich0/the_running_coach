@@ -42,6 +42,15 @@ export function MethodologySheet({ onClose }: { onClose: () => void }) {
         <h3>Symptoms beat numbers</h3>
         <p>If something hurts, the weekly check-in overrides a green chart.</p>
 
+        <h3>Injury risk indicator</h3>
+        <p>
+          This Week shows a Low, Medium or High read at the top, built from the same flags and check-in above rather than anything new: your long run,
+          descent and weekly-volume flags from this week and the 3 before it (this week counts most, each week back counts a little less), a rising
+          4-week average against your 10-week one, and your latest check-in. A region scored 5 or higher, or "reduced training" checked, pushes straight
+          to High no matter what the rest adds up to. Tap it to see exactly what's contributing and by how much. It is a load-based signal from your
+          recent training, not a medical prediction -- the same caveats above apply here too.
+        </p>
+
         <h3>What Legroom does not know</h3>
         <p>Sleep, stress, intensity, surface, shoes. Most thresholds are expert convention and can be adjusted under Advanced. This is not medical advice.</p>
       </div>

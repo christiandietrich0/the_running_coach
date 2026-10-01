@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { CheckinPrompt } from '../components/CheckinPrompt';
+import { InjuryRiskCard } from '../components/InjuryRiskCard';
 import { NextRaceCard } from '../components/NextRaceCard';
 import { PlanUpdatedNote } from '../components/PlanUpdatedNote';
 import { PullToRefresh } from '../components/PullToRefresh';
@@ -44,6 +45,8 @@ export function ThisWeek({
   return (
     <PullToRefresh onRefresh={onRefresh}>
       <div class="screen">
+        <InjuryRiskCard risk={state.injuryRisk} />
+
         <div class="week-chip-row">
           <span class={`week-chip${chip.isRace ? ' week-chip-race' : ''}`}>{chip.text}</span>
         </div>

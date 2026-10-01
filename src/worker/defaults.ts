@@ -58,6 +58,39 @@ export interface Defaults {
   maxWeekKm: number; // life cap
   maxLongRunKm: number;
   includeHikes: boolean;
+  // feasibility()'s NOT_REACHABLE -> TIGHT downgrade (6.4, v1.1 review
+  // round 9 item 3): a race whose long-run shortfall is within this share
+  // of the peak long run target reads as Tight rather than Not-reachable.
+  // Was a fixed 85%; made a setting and defaulted to 80% (v1.1 review
+  // round 10 follow-up item 3) after a 39.6 vs 47 km case (84.3%) stayed
+  // Not-reachable under the old fixed threshold.
+  feasibilityTightReachableFactor: number;
+  // injuryRisk.ts (v1.1 review round 10 Part 2): a load-based early-warning
+  // signal, not a medical prediction -- see injuryRisk.ts's own header
+  // comment for the full scoring shape.
+  injuryRisk: {
+    // Per-week weight by recency: [this week, last week, 2 weeks ago, 3
+    // weeks ago]. This week counts most since it's the most current signal.
+    weekWeights: [number, number, number, number];
+    // Points per flag (long-run / descent / weekly-ratio), before the
+    // per-week weight above is applied.
+    flagPoints: { yellow: number; red: number };
+    // mean4Week / mean10Week ratio (References): a rising short-term
+    // average against the longer one is its own signal, on top of
+    // whatever flags() already flagged on the weeks it's built from.
+    trendRatio: { moderate: number; moderatePoints: number; high: number; highPoints: number };
+    // Latest check-in's worst symptom region (0-5 scale, same as
+    // symptomHoldThreshold/symptomDownThreshold above).
+    symptom: {
+      moderateMin: number; // a region scored in [moderateMin, highMin) adds moderatePoints
+      moderatePoints: number;
+      highMin: number; // a region scored >= highMin, or reducedTraining checked, forces High outright
+    };
+    // Final weighted-sum bands: Low < lowMax, Medium [lowMax, highMax],
+    // High > highMax.
+    lowMax: number;
+    highMax: number;
+  };
 }
 
 export const DEFAULTS: Defaults = {
@@ -101,4 +134,13 @@ export const DEFAULTS: Defaults = {
   maxWeekKm: 80,
   maxLongRunKm: 55,
   includeHikes: false,
+  feasibilityTightReachableFactor: 0.8,
+  injuryRisk: {
+    weekWeights: [1.0, 0.6, 0.4, 0.2],
+    flagPoints: { yellow: 1, red: 3 },
+    trendRatio: { moderate: 1.3, moderatePoints: 1, high: 1.5, highPoints: 2 },
+    symptom: { moderateMin: 3, moderatePoints: 2, highMin: 5 },
+    lowMax: 1.5,
+    highMax: 3.5,
+  },
 };

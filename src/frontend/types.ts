@@ -28,6 +28,8 @@ export interface References {
   D30: number;
   DW4: number;
   M12: number;
+  mean4Week: number;
+  mean10Week: number;
   buildMean: number;
   weeksUsedForC: number;
 }
@@ -146,6 +148,26 @@ export interface Settings {
   [key: string]: unknown;
 }
 
+export type InjuryRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+export type InjuryRiskSource = 'LONG_RUN' | 'DESCENT' | 'RATIO' | 'TREND' | 'SYMPTOMS';
+
+export interface InjuryRiskContributor {
+  source: InjuryRiskSource;
+  label: string;
+  weekStart: string | null;
+  reason: string;
+  weight: number;
+  rawPoints: number;
+  weightedPoints: number;
+}
+
+export interface InjuryRisk {
+  level: InjuryRiskLevel;
+  weightedSum: number;
+  overrideHigh: boolean;
+  contributors: InjuryRiskContributor[];
+}
+
 export interface StateResponse {
   today: string;
   currentWeekStart: string;
@@ -155,6 +177,7 @@ export interface StateResponse {
   currentWeekRuns: RunDTO[];
   checkinNeeded: boolean;
   lastPlanUpdateAt: string | null;
+  injuryRisk: InjuryRisk;
 }
 
 // Bodies for the Phase 4 write endpoints (src/worker/validation.ts).

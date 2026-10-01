@@ -89,6 +89,12 @@ export interface References {
   D30: number;
   DW4: number;
   M12: number;
+  // Trailing 4-week and 10-week mean km_week, same trailing-window shape
+  // as M12 -- used by injuryRisk.ts's load-trend check (mean4Week /
+  // mean10Week > 1.3 or 1.5), not by anything else (v1.1 review round 10
+  // follow-up, Part 2).
+  mean4Week: number;
+  mean10Week: number;
   buildMean: number; // mean km_week of the current Build block, for Down corridors
   weeksUsedForC: number; // how many qualifying weeks were actually found (<= chronicWindowWeeks)
 }
@@ -108,6 +114,33 @@ export interface CheckIn {
   knee: number;
   hipOther: number;
   reducedTraining: boolean;
+}
+
+// injuryRisk.ts's scoring breakdown. See that file's header for the full
+// shape (v1.1 review round 10 Part 2).
+export type InjuryRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export type InjuryRiskSource = 'LONG_RUN' | 'DESCENT' | 'RATIO' | 'TREND' | 'SYMPTOMS';
+
+export interface InjuryRiskContributor {
+  source: InjuryRiskSource;
+  label: string; // short, e.g. "Descent flag" -- for the details list
+  weekStart: string | null; // the week this contributor's flag came from; null for TREND/SYMPTOMS
+  reason: string; // the full flag reason, or a trend/symptom sentence, for the details view
+  weight: number; // the per-week weight applied, or 1 for TREND/SYMPTOMS (unweighted)
+  rawPoints: number;
+  weightedPoints: number;
+}
+
+export interface InjuryRisk {
+  level: InjuryRiskLevel;
+  weightedSum: number;
+  // True when the symptom override (a region >= symptom.highMin, or
+  // reducedTraining checked) forced High regardless of weightedSum.
+  overrideHigh: boolean;
+  // Every nonzero contributor, sorted by weightedPoints descending -- the
+  // UI shows the top 2 inline and the rest in the details view.
+  contributors: InjuryRiskContributor[];
 }
 
 export interface PlanWeek {

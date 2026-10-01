@@ -306,3 +306,26 @@ export async function setLastPlanUpdateAt(env: Env, iso: string): Promise<void> 
     .bind(iso)
     .run();
 }
+
+// Which deployed Worker version (Cloudflare's own version_metadata id, a
+// UUID unique per deploy) last regenerated the plan -- so handleState can
+// tell "a deploy landed new suggestPlan()/references() logic since this"
+// and re-run it for non-edited future weeks automatically, instead of
+// leaving them stuck on whatever the plan looked like under the old code
+// until the next sync or a manual "Rebuild plan" (v1.1 review round 10
+// follow-up item 2). Null until the first version-triggered regeneration
+// ever runs (e.g. a pre-migration database, or local dev where
+// CF_VERSION_METADATA is a fixed placeholder).
+export async function getLastRegeneratedVersion(env: Env): Promise<string | null> {
+  const row = await env.DB.prepare('SELECT last_regenerated_version FROM sync_meta WHERE id = 1').first<{ last_regenerated_version: string | null }>();
+  return row?.last_regenerated_version ?? null;
+}
+
+export async function setLastRegeneratedVersion(env: Env, version: string): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO sync_meta (id, last_regenerated_version) VALUES (1, ?)
+     ON CONFLICT(id) DO UPDATE SET last_regenerated_version = excluded.last_regenerated_version`,
+  )
+    .bind(version)
+    .run();
+}

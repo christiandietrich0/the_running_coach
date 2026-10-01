@@ -96,21 +96,21 @@ describe('feasibility', () => {
 // exactly 85% counts) is close enough to call Tight instead -- whichever
 // dimension (long run or weekly volume) actually drove the Not-reachable
 // verdict in the first place.
-describe('feasibility: Tight-vs-Not-reachable long-run rescue at 85%', () => {
+describe('feasibility: Tight-vs-Not-reachable long-run rescue at settings.feasibilityTightReachableFactor (80%)', () => {
   // Same 60km B race as above: peak_long_run = 27km, 2 taper weeks.
   const r = race({ priority: 'B', km: 60, dplusM: 0 });
 
-  it('reads Tight, not Not-reachable, when the reachable long run is within 15% of the target', () => {
+  it('reads Tight, not Not-reachable, when the reachable long run is within the threshold of the target', () => {
     // budget = weeksAvailable(1) - taper(2) -> clamped to 0, so the
     // reachable long run stays at the baseline: 25 / 27 = 92.6%, well
-    // above the 85% floor.
+    // above the 80% floor.
     const f = feasibility(r, 25, 50, 1, DEFAULTS);
     expect(f.maxReachableLongRunKm).toBeCloseTo(25);
     expect(f.status).toBe('TIGHT');
   });
 
-  it('stays Not-reachable when the reachable long run falls below 85% of the target', () => {
-    // 20 / 27 = 74%, below the floor.
+  it('stays Not-reachable when the reachable long run falls below the threshold of the target', () => {
+    // 20 / 27 = 74%, below the 80% floor.
     const f = feasibility(r, 20, 50, 1, DEFAULTS);
     expect(f.maxReachableLongRunKm).toBeCloseTo(20);
     expect(f.status).toBe('NOT_REACHABLE');
@@ -120,7 +120,7 @@ describe('feasibility: Tight-vs-Not-reachable long-run rescue at 85%', () => {
     // currentLR30=50 is already far above this race's 27km peak long run
     // (reachable stays at 50, comfortably over target) -- currentC=10
     // makes the *volume* dimension the real, unreachable blocker, but the
-    // rescue is now unconditional: the long run alone clears the 85% bar,
+    // rescue is now unconditional: the long run alone clears the 80% bar,
     // so the race still reads Tight, not Not-reachable (round 8 gated
     // this on the long run being the binding dimension; round 9 dropped
     // that qualifier).
@@ -129,14 +129,37 @@ describe('feasibility: Tight-vs-Not-reachable long-run rescue at 85%', () => {
     expect(f.status).toBe('TIGHT');
   });
 
-  it('reads Tight at exactly the 85% boundary, inclusive', () => {
+  it('reads Tight at exactly the settings threshold, inclusive', () => {
     // A budget of 0 (weeksAvailable == taperWeeksNeeded) leaves the
-    // reachable long run at the baseline, so a baseline of exactly 85% of
-    // the 27km target (22.95km) must round-trip to Tight, not
-    // Not-reachable -- ">=" is inclusive of the boundary itself.
+    // reachable long run at the baseline, so a baseline of exactly
+    // feasibilityTightReachableFactor of the 27km target must round-trip
+    // to Tight, not Not-reachable -- ">=" is inclusive of the boundary
+    // itself. Derived from the setting, not a hardcoded 85%, so this stays
+    // correct if the default ever changes again.
     const target = raceTargets(r, DEFAULTS).peakLongRunKm;
-    const f = feasibility(r, target * 0.85, 50, 2, DEFAULTS);
+    const f = feasibility(r, target * DEFAULTS.feasibilityTightReachableFactor, 50, 2, DEFAULTS);
     expect(f.status).toBe('TIGHT');
+  });
+
+  it('a lower feasibilityTightReachableFactor setting rescues a shortfall the old fixed 85% would have missed (round 10 follow-up item 3: 39.6 vs 47km)', () => {
+    // effortKm = 47 / 0.45 = 104.44km -> peakLongRunKm = 47km, under the
+    // 55km life cap. 2 taper weeks (B race); budget 0 (weeksAvailable ==
+    // taperWeeksNeeded) keeps the reachable long run at the 39.6 baseline.
+    // 39.6 / 47 = 84.3%: below the old fixed 85% (would stay
+    // Not-reachable) but above the new default 80% setting (reads Tight).
+    const bigB = race({ priority: 'B', km: 104.444, dplusM: 0 });
+    const target = raceTargets(bigB, DEFAULTS).peakLongRunKm;
+    expect(target).toBeCloseTo(47, 0);
+
+    const f = feasibility(bigB, 39.6, 100, 2, DEFAULTS);
+    expect(f.maxReachableLongRunKm).toBeCloseTo(39.6);
+    expect(f.status).toBe('TIGHT');
+
+    // Confirms this really is the 80%-vs-85% boundary, not a fluke of the
+    // fixture: a stricter 85% setting puts the exact same case back to
+    // Not-reachable.
+    const strict = feasibility(bigB, 39.6, 100, 2, { ...DEFAULTS, feasibilityTightReachableFactor: 0.85 });
+    expect(strict.status).toBe('NOT_REACHABLE');
   });
 });
 
@@ -175,7 +198,7 @@ describe('feasibility: weekly volume dimension', () => {
   it('reports the peak week capped below the race\'s own target when volume is not reachable', () => {
     const f = feasibility(r, 50, 10, 2, DEFAULTS); // no room for any Build step (2 taper weeks alone use the budget)
     // currentLR30=50 is trivially reachable/comfortable for this race's
-    // small 27km peak long run, so the unconditional 85% rescue (round 9
+    // small 27km peak long run, so the unconditional rescue (round 9
     // item 3) lifts this from Not-reachable to Tight even though volume
     // is the real blocker -- the reachable *peak week* figure below still
     // correctly reports how short volume actually falls.

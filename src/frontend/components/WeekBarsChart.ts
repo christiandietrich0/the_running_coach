@@ -213,8 +213,13 @@ export function useWeekBarsChart({
     // with the overlay row's title/axis tick right underneath it (v1.1
     // review round 10 item 5). top: 22 gives the "Today" label (now drawn
     // further up, see todayLine) room of its own above flagDots' band.
+    // left: 22, matching WeekOverlayChart's own plotLayout below -- a 5-6
+    // character date label like "Aug 3" is wide enough that half its width
+    // alone exceeded the old 12px there, so the first week's label was
+    // still getting sliced by the scroll container's left edge (v1.1
+    // review round 10 follow-up item 4).
     const sharedLayout = { padding: { top: 22, bottom: 20 } };
-    const plotLayout = { padding: { top: 22, bottom: 20, left: 12 } };
+    const plotLayout = { padding: { top: 22, bottom: 20, left: 22 } };
     const sharedX = { ticks: { display: false }, grid: { display: false }, border: { display: false } };
 
     const plotChart = new ChartJS(plotCanvas, {

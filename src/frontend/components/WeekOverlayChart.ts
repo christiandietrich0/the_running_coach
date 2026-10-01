@@ -72,7 +72,11 @@ export function useWeekOverlayChart({
     // mess. This gives the title -- and the bars row's letters above it --
     // room to breathe (v1.1 review round 10 item 5).
     const sharedLayout = { padding: { top: 14, bottom: 20 } };
-    const plotLayout = { padding: { top: 14, bottom: 20, left: 12 } };
+    // left: 22 (not 12) -- a 5-6 character date label like "Aug 3" is wide
+    // enough that half its width alone exceeded the old 12px, so the first
+    // week's own label was still getting sliced by the scroll container's
+    // left edge (v1.1 review round 10 follow-up item 4).
+    const plotLayout = { padding: { top: 14, bottom: 20, left: 22 } };
     const xFont = { size: 10 };
 
     const plotChart = new ChartJS(plotCanvas, {

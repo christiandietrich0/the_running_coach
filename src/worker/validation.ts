@@ -126,13 +126,19 @@ export function parseActivityOverridePatch(body: unknown): ValidationResult<{ is
 
 // A provided value must have the same shape as its Defaults counterpart:
 // same primitive type, or (for the nested corridor/taper objects) the
-// same set of keys, each recursively matching. Keeps a malformed settings
-// write from corrupting a value the logic module reads unchecked.
+// same set of keys, each recursively matching, or (for a fixed-length
+// tuple like injuryRisk.weekWeights) the same length with each element
+// recursively matching. Keeps a malformed settings write from corrupting a
+// value the logic module reads unchecked.
 function sameShape(value: unknown, template: unknown): boolean {
   if (typeof template === 'number') return typeof value === 'number' && Number.isFinite(value);
   if (typeof template === 'boolean') return typeof value === 'boolean';
   if (typeof template === 'string') return typeof value === 'string';
-  if (typeof template === 'object' && template !== null && !Array.isArray(template)) {
+  if (Array.isArray(template)) {
+    if (!Array.isArray(value) || value.length !== template.length) return false;
+    return template.every((t, i) => sameShape(value[i], t));
+  }
+  if (typeof template === 'object' && template !== null) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
     const templateKeys = Object.keys(template as object);
     const valueKeys = Object.keys(value as object);

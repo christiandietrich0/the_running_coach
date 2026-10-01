@@ -4,6 +4,7 @@
 import {
   applySymptomLock,
   buildDenseTimeline,
+  computeInjuryRisk,
   corridor,
   feasibility,
   flags,
@@ -19,7 +20,8 @@ import {
   weeklyAggregates,
 } from '../logic';
 import { addDays, addWeeks, diffDays } from '../logic/dates';
-import type { CheckIn, Corridor, Feasibility, Flag, PlanWeek, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
+import type { InjuryRiskWeekInput } from '../logic/injuryRisk';
+import type { CheckIn, Corridor, Feasibility, Flag, InjuryRisk, PlanWeek, Race, RaceTargets, References, Run, TimelinePoint, Verdict, WeekType } from '../logic/types';
 import { getLastPlanUpdateAt, loadCheckins, loadPlanWeeks, loadRaces, loadRawActivities } from './db';
 import type { Defaults } from './defaults';
 import type { Env } from './index';
@@ -196,6 +198,9 @@ export interface StateResponse {
   // review round 5 item 3), for the frontend's dismissible "Plan updated"
   // note. Null until the first sync-triggered regeneration ever runs.
   lastPlanUpdateAt: string | null;
+  // This week's load-based injury risk read (v1.1 review round 10 Part
+  // 2) -- see injuryRisk.ts's own header for what it is and isn't.
+  injuryRisk: InjuryRisk;
 }
 
 function toRunDto(run: Run): RunDTO {
@@ -381,12 +386,14 @@ export async function buildState(env: Env): Promise<StateResponse> {
     };
   });
 
-  const currentRefs = weeks.find((w) => w.weekStart === currentWeekStart)?.refs ?? {
+  const currentRefs: References = weeks.find((w) => w.weekStart === currentWeekStart)?.refs ?? {
     C: 0,
     LR30: 0,
     D30: 0,
     DW4: 0,
     M12: 0,
+    mean4Week: 0,
+    mean10Week: 0,
     buildMean: 0,
     weeksUsedForC: 0,
   };
@@ -409,5 +416,23 @@ export async function buildState(env: Env): Promise<StateResponse> {
     .sort((a, b) => (a.startLocal < b.startLocal ? -1 : 1))
     .map(toRunDto);
 
-  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded, lastPlanUpdateAt };
+  // This week plus the 3 completed weeks before it, most-recent-first, for
+  // injuryRisk.ts's own per-week recency weighting (v1.1 review round 10
+  // Part 2) -- reuses each week's flags exactly as flags() already
+  // computed them above, no separate computation.
+  const currentWeekIdx = weeks.findIndex((w) => w.weekStart === currentWeekStart);
+  const injuryRiskWeeks: InjuryRiskWeekInput[] =
+    currentWeekIdx === -1
+      ? []
+      : weeks
+          .slice(Math.max(0, currentWeekIdx - 3), currentWeekIdx + 1)
+          .reverse()
+          .map((w) => ({ weekStart: w.weekStart, flags: w.flags }));
+  const latestCheckin = checkinsAsc.length > 0 ? checkinsAsc[checkinsAsc.length - 1] : null;
+  const injuryRisk: InjuryRisk = computeInjuryRisk(
+    { weeks: injuryRiskWeeks, mean4Week: currentRefs.mean4Week, mean10Week: currentRefs.mean10Week, latestCheckin },
+    settings,
+  );
+
+  return { today, currentWeekStart, settings, weeks, races: raceDtos, currentWeekRuns, checkinNeeded, lastPlanUpdateAt, injuryRisk };
 }

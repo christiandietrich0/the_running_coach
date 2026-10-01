@@ -7,3 +7,4 @@ export * from './corridor';
 export * from './races';
 export * from './plan';
 export * from './guidance';
+export * from './injuryRisk';
