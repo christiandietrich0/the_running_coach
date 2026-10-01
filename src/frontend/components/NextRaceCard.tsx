@@ -1,8 +1,8 @@
 import { daysUntil } from '../format';
-import { FEASIBILITY_LABEL, WEEK_TYPE_LABEL } from '../labels';
-import type { RaceState, WeekType } from '../types';
+import { FEASIBILITY_LABEL, weekChipLabel } from '../labels';
+import type { RaceState, WeekState } from '../types';
 
-export function NextRaceCard({ races, today, currentWeekType }: { races: RaceState[]; today: string; currentWeekType: WeekType }) {
+export function NextRaceCard({ races, today, currentWeek }: { races: RaceState[]; today: string; currentWeek: WeekState }) {
   const upcoming = [...races].filter((r) => daysUntil(r.date, today) >= 0).sort((a, b) => (a.date < b.date ? -1 : 1))[0];
 
   if (!upcoming) {
@@ -15,6 +15,12 @@ export function NextRaceCard({ races, today, currentWeekType }: { races: RaceSta
   }
 
   const days = daysUntil(upcoming.date, today);
+  // weekChipLabel() -- the same label the This Week chip and Plan screen
+  // use -- not the plain type name: a Peak week or taper week otherwise
+  // showed as plain "Build week"/"Taper week" here, disagreeing with the
+  // chip right above it for the exact same week (v1.1 review round 10
+  // follow-up item 2).
+  const chip = weekChipLabel(currentWeek, races);
 
   return (
     <div class="card">
@@ -25,7 +31,7 @@ export function NextRaceCard({ races, today, currentWeekType }: { races: RaceSta
         {upcoming.feasibility && (
           <span class={`pill pill-${upcoming.feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[upcoming.feasibility.status]}</span>
         )}
-        <span class="pill">{WEEK_TYPE_LABEL[currentWeekType]} week</span>
+        <span class="pill">{chip.text}</span>
       </div>
     </div>
   );

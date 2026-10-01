@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildDenseTimeline } from '../../src/logic/aggregate';
-import { addWeeks } from '../../src/logic/dates';
+import { corridor } from '../../src/logic/corridor';
+import { addWeeks, mondayOf } from '../../src/logic/dates';
 import { flags, verdict } from '../../src/logic/flags';
 import { raceSlotWeekType, raceStructureSlots, suggestPlan } from '../../src/logic/plan';
 import { isReentryWeek, references } from '../../src/logic/references';
 import { DEFAULTS } from '../../src/worker/defaults';
 import { blendCurrentWeekReference } from '../../src/worker/state';
-import type { PlanWeek, Race, WeekType, WeeklyAggregate } from '../../src/logic/types';
+import type { PlanWeek, Race, Run, WeekType, WeeklyAggregate } from '../../src/logic/types';
 
 function week(weekStart: string, kmWeek: number): WeeklyAggregate {
   return {
@@ -574,6 +575,59 @@ describe("suggestPlan: a single outlier week doesn't skew the recent D-/km rate"
     const nextWeek = plan.find((w) => w.weekStart === CURRENT)!;
     const expectedDminus = 10 * (nextWeek.km ?? 0); // 500/50 = 10 m/km, the normal rate
     expect(nextWeek.dminusM ?? 0).toBeCloseTo(expectedDminus, 0);
+  });
+});
+
+// v1.1 review round 10 follow-up item 3 (second pass): a live report
+// suspected This Week's displayed caps and the planner's own clamp were on
+// two different, possibly-diverging computations. They are not -- both
+// ultimately call the same references()/corridor() pair -- but this proves
+// it with a test instead of an assertion: given the exact same history,
+// independently calling references()+corridor() for a week (exactly what
+// buildState() does to produce the figure This Week displays as "Up to X m
+// this week") and calling suggestPlan() for that same week (which clamps
+// its own generated dminusM via the same corridor()) must agree -- the
+// planner's own generated D- can never exceed what This Week would show as
+// that week's ceiling.
+describe("suggestPlan's own dminusM clamp matches This Week's independently-computed corridor for the same week", () => {
+  function weekWithDescent(weekStart: string, kmWeek: number, dminusWeek: number): WeeklyAggregate {
+    return { ...week(weekStart, kmWeek), dminusWeek };
+  }
+
+  function fakeRun(weekStart: string): Run {
+    return { id: `r-${weekStart}`, activityIds: [`r-${weekStart}`], startLocal: `${weekStart}T08:00:00`, endLocal: `${weekStart}T09:00:00`, distanceM: 10000, movingS: 3600, gainM: 0, lossM: 0, isRace: false };
+  }
+
+  it('never generates a week whose D- exceeds the ceiling an independent references()+corridor() call gives for the same week', () => {
+    const history: WeeklyAggregate[] = [
+      weekWithDescent(addWeeks(CURRENT, -4), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -3), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -2), 50, 20000), // an extreme outlier
+      weekWithDescent(addWeeks(CURRENT, -1), 50, 500),
+    ];
+    const actualRuns = history.map((w) => fakeRun(w.weekStart));
+
+    // Exactly what buildState() does for This Week's own display: build
+    // the dense timeline from the same actual history (no plan rows yet),
+    // compute references() and corridor() for the week suggestPlan is
+    // about to generate.
+    const dense = buildDenseTimeline(history, []);
+    expect(mondayOf(CURRENT)).toBe(CURRENT); // sanity: CURRENT is itself a Monday
+    const independentRefs = references({ weekStart: CURRENT, denseTimeline: dense, actualRuns }, DEFAULTS);
+    const independentCorridor = corridor('BUILD', independentRefs, DEFAULTS);
+
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [],
+      actualAggregates: history,
+      actualRuns,
+      settings: DEFAULTS,
+      horizonWeeks: 2,
+    });
+    const generated = plan.find((w) => w.weekStart === CURRENT)!;
+
+    expect(generated.dminusM ?? 0).toBeLessThanOrEqual(independentCorridor.dminusWeekMax + 1e-6);
   });
 });
 

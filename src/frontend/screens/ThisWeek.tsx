@@ -61,7 +61,7 @@ export function ThisWeek({
           <WeekNumbers week={week} settings={state.settings} />
         </div>
 
-        <NextRaceCard races={state.races} today={state.today} currentWeekType={week.type} />
+        <NextRaceCard races={state.races} today={state.today} currentWeek={week} />
 
         <CheckinPrompt needed={state.checkinNeeded} onClick={onOpenCheckin} />
 
