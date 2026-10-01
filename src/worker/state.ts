@@ -176,6 +176,15 @@ export interface WeekGuidanceDTO {
 export interface RaceStateDTO extends Race {
   targets: RaceTargets;
   feasibility: Feasibility | null;
+  // Display only, never fed into any reference/cap/flag computation (the
+  // clipped LR30 stays the sole safety reference for those, unchanged): the
+  // raw, unclipped distance of the longest non-race run since the last
+  // race or Recovery week, and its date -- "what's actually the biggest
+  // effort banked this block", for the locked-in race card (v1.1 review
+  // round 10 follow-up item 4, refined again). Null before any such run
+  // exists.
+  peakLongRunDoneKm: number | null;
+  peakLongRunDoneDate: string | null;
 }
 
 export interface RunDTO {
@@ -250,6 +259,35 @@ export function raceFeasibilityExtra(weeks: WeekStateDTO[], currentWeekStart: st
   }
 
   return { lockedInByWeekType, lastBuild };
+}
+
+// The last training-block reset: the most recent week, strictly before
+// `currentWeekStart`, that was a race week or a Recovery week. Everything
+// from the day after it counts toward peakLongRunDone() below. Null means
+// no such week exists yet in the account's whole history -- count from the
+// start of it.
+export function lastResetBoundary(dense: TimelinePoint[], currentWeekStart: string): string | null {
+  for (let i = dense.length - 1; i >= 0; i--) {
+    const w = dense[i];
+    if (w.weekStart >= currentWeekStart) continue;
+    if (w.isRaceWeek || w.weekType === 'RECOVERY') return addDays(w.weekStart, 6);
+  }
+  return null;
+}
+
+// Display only, never fed into any cap/flag/reference computation (see
+// RaceStateDTO's own comment) -- the raw, unclipped distance of the
+// longest non-race run since the last race or Recovery week, and its
+// date. A genuinely new best effort is still a new best effort even when
+// it's one clippedContribution() would have capped for reference purposes
+// elsewhere; this is deliberately not that number (v1.1 review round 10
+// follow-up item 4, refined again).
+export function peakLongRunDone(dense: TimelinePoint[], runs: Run[], currentWeekStart: string): { km: number; date: string } | null {
+  const boundary = lastResetBoundary(dense, currentWeekStart);
+  const candidates = runs.filter((r) => !r.isRace && (boundary == null || r.startLocal.slice(0, 10) > boundary));
+  if (candidates.length === 0) return null;
+  const longest = candidates.reduce((max, r) => (r.distanceM > max.distanceM ? r : max));
+  return { km: longest.distanceM / 1000, date: longest.startLocal.slice(0, 10) };
 }
 
 export async function buildState(env: Env): Promise<StateResponse> {
@@ -455,6 +493,11 @@ export async function buildState(env: Env): Promise<StateResponse> {
     weeksUsedForC: 0,
   };
 
+  // Athlete-wide, not per-race: the same "since the last race or Recovery
+  // week" boundary applies whichever upcoming race's card happens to show
+  // it (RaceStateDTO's own comment).
+  const peakLongRunDoneReading = peakLongRunDone(dense, runs, currentWeekStart);
+
   const raceDtos: RaceStateDTO[] = races.map((race) => {
     const targets = raceTargets(race, settings);
     const raceMonday = mondayOf(race.date);
@@ -464,7 +507,13 @@ export async function buildState(env: Env): Promise<StateResponse> {
       const extra = raceFeasibilityExtra(weeks, currentWeekStart, race, settings);
       feas = feasibility(race, currentRefs.LR30, currentRefs.C, weeksAvailable, settings, extra);
     }
-    return { ...race, targets, feasibility: feas };
+    return {
+      ...race,
+      targets,
+      feasibility: feas,
+      peakLongRunDoneKm: peakLongRunDoneReading?.km ?? null,
+      peakLongRunDoneDate: peakLongRunDoneReading?.date ?? null,
+    };
   });
 
   const checkinNeeded = !checkinsAsc.some((c) => c.weekStart === currentWeekStart);

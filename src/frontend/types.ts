@@ -127,6 +127,8 @@ export interface RaceState {
   priority: 'A' | 'B' | 'C';
   targets: RaceTargets;
   feasibility: Feasibility | null;
+  peakLongRunDoneKm: number | null;
+  peakLongRunDoneDate: string | null;
 }
 
 export interface RunDTO {

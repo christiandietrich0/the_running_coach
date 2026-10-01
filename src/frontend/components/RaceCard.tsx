@@ -1,13 +1,9 @@
-import { daysUntil, fmtKm, fmtM } from '../format';
+import { daysUntil, fmtKm, fmtM, fmtShortDate } from '../format';
 import { FEASIBILITY_LABEL } from '../labels';
 import type { RaceState, WeekState } from '../types';
 
 function fmtDate(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-}
-
-function fmtShortDate(dateStr: string): string {
-  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 export function RaceCard({
@@ -66,7 +62,10 @@ export function RaceCard({
           // reachable verdict here would just restate a shortfall nothing
           // can still close, so show what's actually been banked instead.
           <div class="race-meta">
-            <span class="pill">Peak long run done: {fmtKm(feasibility.maxReachableLongRunKm)} km</span>
+            <span class="pill">
+              Peak long run done:{' '}
+              {race.peakLongRunDoneKm != null ? `${fmtKm(race.peakLongRunDoneKm)} km (${fmtShortDate(race.peakLongRunDoneDate!)})` : '--'}
+            </span>
             {feasibility.lastBuildStatus != null && (
               <span class="muted">
                 Build ended {FEASIBILITY_LABEL[feasibility.lastBuildStatus]} ({fmtKm(feasibility.lastBuildMaxReachableLongRunKm ?? 0)} of{' '}

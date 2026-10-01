@@ -1,4 +1,4 @@
-import { daysUntil, fmtKm } from '../format';
+import { daysUntil, fmtKm, fmtShortDate } from '../format';
 import { FEASIBILITY_LABEL, weekChipLabel } from '../labels';
 import type { RaceState, WeekState } from '../types';
 
@@ -30,7 +30,10 @@ export function NextRaceCard({ races, today, currentWeek }: { races: RaceState[]
       <div class="race-meta">
         {upcoming.feasibility &&
           (upcoming.feasibility.status === 'LOCKED_IN' ? (
-            <span class="pill">Peak long run done: {fmtKm(upcoming.feasibility.maxReachableLongRunKm)} km</span>
+            <span class="pill">
+              Peak long run done:{' '}
+              {upcoming.peakLongRunDoneKm != null ? `${fmtKm(upcoming.peakLongRunDoneKm)} km (${fmtShortDate(upcoming.peakLongRunDoneDate!)})` : '--'}
+            </span>
           ) : (
             <span class={`pill pill-${upcoming.feasibility.status.toLowerCase()}`}>{FEASIBILITY_LABEL[upcoming.feasibility.status]}</span>
           ))}
