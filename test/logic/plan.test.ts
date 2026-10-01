@@ -503,6 +503,80 @@ describe('suggestPlan', () => {
   });
 });
 
+// v1.1 review round 10 follow-up item 3: a live report that a peak week's
+// planned D- (974m) looked disproportionate traced back to recentSlopes()
+// summing raw, unclipped weekly D- totals -- a single outlier week (one
+// huge descent run) skewed the whole recent D-/km rate, and corridor()'s
+// own dminusWeekMax safety cap didn't catch it because D30/DW4 were
+// themselves high enough not to bind. Each week's own contribution is now
+// clipped the same way references.ts clips a single run/week's
+// contribution to D30/DW4, before averaging.
+describe("suggestPlan: a single outlier week doesn't skew the recent D-/km rate", () => {
+  function weekWithDescent(weekStart: string, kmWeek: number, dminusWeek: number): WeeklyAggregate {
+    return { ...week(weekStart, kmWeek), dminusWeek };
+  }
+
+  it("clips an outlier week's D- contribution instead of letting it dominate the average", () => {
+    // 3 normal weeks at 10m/km, one outlier at 100m/km (10x) -- same shape
+    // as the live report (a single huge descent run in an otherwise
+    // ordinary week). Unclipped: (500+500+5000+500)/200 = 32.5 m/km, which
+    // would project an unreasonable ~1,787m onto a 55km future week.
+    const history: WeeklyAggregate[] = [
+      weekWithDescent(addWeeks(CURRENT, -4), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -3), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -2), 50, 5000), // the outlier week
+      weekWithDescent(addWeeks(CURRENT, -1), 50, 500),
+    ];
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [],
+      actualAggregates: history,
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 2,
+    });
+
+    const nextWeek = plan.find((w) => w.weekStart === CURRENT)!;
+    const unclippedProjection = (32.5 * (nextWeek.km ?? 0)).valueOf();
+    // Clipped chain (capFactor 1.3, oldest-first): 500 (bootstrap) -> 500
+    // (under cap) -> clip(5000, 1.3x500=650)=650 -> clip(500, 1.3x650=845)
+    // =500. Clipped sum 2150 / 200km = 10.75 m/km, close to the 3 normal
+    // weeks' own 10 m/km -- the outlier raised the rate by one legitimate
+    // step, not 10x.
+    const clippedRate = (500 + 500 + 650 + 500) / 200;
+    const expectedDminus = clippedRate * (nextWeek.km ?? 0);
+    expect(nextWeek.dminusM ?? 0).toBeCloseTo(expectedDminus, 0);
+    expect(nextWeek.dminusM ?? 0).toBeLessThan(unclippedProjection * 0.5);
+  });
+
+  it('a single normal week after the outlier is unaffected -- no permanent inflation', () => {
+    // Same outlier, but now 3 more normal weeks have happened since --
+    // the clipped rate should settle back toward normal, not stay
+    // dominated by the long-gone outlier (chronicWindowWeeks=4 means the
+    // outlier itself ages out of the averaging window entirely here).
+    const history: WeeklyAggregate[] = [
+      weekWithDescent(addWeeks(CURRENT, -7), 50, 5000), // outlier, now outside the 4-week window
+      weekWithDescent(addWeeks(CURRENT, -4), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -3), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -2), 50, 500),
+      weekWithDescent(addWeeks(CURRENT, -1), 50, 500),
+    ];
+    const plan = suggestPlan({
+      currentWeekStart: CURRENT,
+      existingPlan: [],
+      races: [],
+      actualAggregates: history,
+      actualRuns: [],
+      settings: DEFAULTS,
+      horizonWeeks: 2,
+    });
+    const nextWeek = plan.find((w) => w.weekStart === CURRENT)!;
+    const expectedDminus = 10 * (nextWeek.km ?? 0); // 500/50 = 10 m/km, the normal rate
+    expect(nextWeek.dminusM ?? 0).toBeCloseTo(expectedDminus, 0);
+  });
+});
+
 // v1.1 review round 6: the whole point of matching flags()'s hard
 // week-on-week base (and its Recovery/Race/Limited exclusions) to
 // suggestPlan()'s own is that suggestPlan's output should never trip that

@@ -10,7 +10,17 @@ async function readStateOrThrow(res: Response, what: string): Promise<StateRespo
 }
 
 export async function fetchState(): Promise<StateResponse> {
-  const res = await fetch('/api/state');
+  // cache: 'no-store' bypasses the browser's own HTTP cache entirely (not
+  // just the service worker's) -- the server's own Cache-Control: no-store
+  // header (handleState) only governs responses stored *after* it existed,
+  // so a response the browser cached under an older deploy (before that
+  // header was added) could keep being served indefinitely regardless of
+  // how many times the Worker itself was redeployed since. This is what
+  // was actually behind a live report of stale D30/DW4 figures surviving
+  // multiple deploys (v1.1 review round 10 follow-up) -- not a computation
+  // bug; references.ts reproduced the correct clipped values when run
+  // directly against the same account's real data.
+  const res = await fetch('/api/state', { cache: 'no-store' });
   return readStateOrThrow(res, 'GET /api/state');
 }
 
@@ -82,7 +92,7 @@ export async function runSync(mode: 'backfill' | 'incremental'): Promise<SyncRes
 }
 
 export async function fetchActivities(): Promise<ActivityDTO[]> {
-  const res = await fetch('/api/activities');
+  const res = await fetch('/api/activities', { cache: 'no-store' });
   if (!res.ok) throw new Error(`GET /api/activities failed: ${res.status}`);
   const body = (await res.json()) as { activities: ActivityDTO[] };
   return body.activities;

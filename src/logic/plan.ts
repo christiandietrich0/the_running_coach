@@ -40,12 +40,33 @@ function isLocked(week: PlanWeek | undefined): boolean {
 
 // Recent D+/km and D-/km ratios, used to scale a filled week's D+/D- from
 // its planned km (7.3). No history yet -> project no descent.
-function recentSlopes(actualAggregates: WeeklyAggregate[], windowWeeks: number): { dplusPerKm: number; dminusPerKm: number } {
+//
+// Each week's own D- contribution is clipped to capFactor x the running
+// max of the (clipped) weeks before it, the same way references.ts clips
+// a single run/week's contribution to D30/DW4, before summing for the
+// rate -- a plain sum-of-raw-weeks average isn't robust to one outlier: a
+// single genuinely huge descent week (e.g. one long trail run with ten
+// times the usual loss) otherwise dominates dminusPerKm and inflates every
+// week suggestPlan() generates afterward, including corridor()'s own
+// dminusWeekMax safety cap not actually catching it when D30/DW4 are
+// themselves high enough not to bind (v1.1 review round 10 follow-up item
+// 3 -- a peak week's planned D- read 974m off a single Sep 27 outlier
+// week's raw 1,299m run). D+ is left unclipped: only D- was reported as
+// disproportionate, and D+ has no equivalent single-run spike risk.
+function recentSlopes(actualAggregates: WeeklyAggregate[], windowWeeks: number, capFactor: number): { dplusPerKm: number; dminusPerKm: number } {
   const recent = [...actualAggregates].sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1)).slice(0, windowWeeks);
   const km = recent.reduce((s, w) => s + w.kmWeek, 0);
   if (km <= 0) return { dplusPerKm: 0, dminusPerKm: 0 };
   const dplusM = recent.reduce((s, w) => s + (w.effortKmWeek - w.kmWeek) * 100, 0); // effortKmWeek = km + D+/100
-  const dminusM = recent.reduce((s, w) => s + w.dminusWeek, 0);
+
+  let runningMax = 0;
+  let dminusM = 0;
+  for (const w of [...recent].reverse()) {
+    // oldest first, so growth is judged in the order it actually happened
+    const contribution = runningMax <= 0 ? w.dminusWeek : Math.min(w.dminusWeek, capFactor * runningMax);
+    if (contribution > runningMax) runningMax = contribution;
+    dminusM += contribution;
+  }
   return { dplusPerKm: dplusM / km, dminusPerKm: dminusM / km };
 }
 
@@ -127,7 +148,7 @@ export function suggestPlan(input: SuggestPlanInput): PlanWeek[] {
 
   const byWeek = new Map<string, PlanWeek>(existingPlan.map((w) => [w.weekStart, w]));
   const aggByWeek = new Map(actualAggregates.map((a) => [a.weekStart, a]));
-  const { dplusPerKm, dminusPerKm } = recentSlopes(actualAggregates, settings.chronicWindowWeeks);
+  const { dplusPerKm, dminusPerKm } = recentSlopes(actualAggregates, settings.chronicWindowWeeks, settings.weeklyDminusCapFactor);
   const slots = raceStructureSlots(races, settings);
   const peakMeanByRaceId = new Map<number, number>();
 
