@@ -81,7 +81,7 @@ export async function putSettings(patch: Partial<Settings>): Promise<StateRespon
   return readStateOrThrow(res, 'PUT /api/settings');
 }
 
-export async function runSync(mode: 'backfill' | 'incremental'): Promise<SyncResult> {
+export async function runSync(mode: 'backfill' | 'incremental' | 'manual'): Promise<SyncResult> {
   const res = await fetch(`/api/sync?mode=${mode}`, { method: 'POST' });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

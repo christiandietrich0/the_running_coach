@@ -19,6 +19,7 @@ export interface IntervalsActivity {
   total_elevation_gain?: number | null;
   total_elevation_loss?: number | null;
   race?: boolean | null;
+  tags?: string[] | null;
 }
 
 function authHeader(apiKey: string): string {

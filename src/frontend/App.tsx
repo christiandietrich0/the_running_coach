@@ -36,7 +36,7 @@ export function App() {
   // same as Settings' "Sync now", then the fresh state -- so a pull down
   // actually pulls in new runs, not just a UI repaint.
   async function handleRefresh() {
-    await runSync('incremental');
+    await runSync('manual');
     const next = await fetchState();
     setState(next);
   }

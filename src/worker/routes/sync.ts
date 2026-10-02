@@ -20,7 +20,7 @@ export async function syncAndUpdatePlan(env: Env, mode: SyncMode): Promise<SyncR
 export async function handleSync(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const modeParam = url.searchParams.get('mode');
-  const mode: SyncMode = modeParam === 'backfill' ? 'backfill' : 'incremental';
+  const mode: SyncMode = modeParam === 'backfill' ? 'backfill' : modeParam === 'manual' ? 'manual' : 'incremental';
 
   try {
     const result = await syncAndUpdatePlan(env, mode);

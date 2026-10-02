@@ -11,7 +11,7 @@ export function SyncPanel() {
     setSyncing(true);
     setError(null);
     try {
-      setResult(await runSync('incremental'));
+      setResult(await runSync('manual'));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

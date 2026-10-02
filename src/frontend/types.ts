@@ -234,7 +234,7 @@ export interface ActivityDTO {
 }
 
 export interface SyncResult {
-  mode: 'backfill' | 'incremental';
+  mode: 'backfill' | 'incremental' | 'manual';
   rangeOldest: string;
   rangeNewest: string;
   includeHikes: boolean;
