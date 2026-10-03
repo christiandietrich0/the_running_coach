@@ -100,8 +100,8 @@ describe('buildDenseTimeline', () => {
 
   // v1.1 review round 4 item 1: an actual race week's long-run point used
   // to be nulled out here, but that only ever suppressed the display --
-  // LR30/D30 already exclude a race via actualRuns' own isRace check, not
-  // via this field. The display should show the race distance.
+  // this field was never what excluded a race from anything. The display
+  // should show the race distance.
   it('keeps the race distance as the long-run point for an actual race week', () => {
     const dense = buildDenseTimeline(actual, []);
     const raceWeek = dense.find((w) => w.weekStart === '2026-07-20')!;

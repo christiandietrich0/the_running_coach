@@ -99,7 +99,7 @@ function activity(id: string, startLocal: string, distanceM: number, lossM: numb
 }
 
 describe('references: LR30 / D30', () => {
-  it('is the longest non-race run in the 30 days before weekStart', () => {
+  it('is the longest run in the 30 days before weekStart', () => {
     // 'b' (the second, smaller run) coming after the bigger 'a' means it
     // never has to clear the red-escalation check (v1.1 review round 9
     // item 8 -- that check only ever gates a run trying to raise the
@@ -133,15 +133,23 @@ describe('references: LR30 / D30', () => {
     expect(refs.LR30).toBeCloseTo(36);
   });
 
-  it('excludes race-tagged runs, even if they are the longest', () => {
+  // v1.1 final pre-1.0 pass follow-up: an earlier version excluded a
+  // race-tagged run from this pool entirely. "Peak long run done" (a
+  // separate, display-only figure in state.ts) does exclude races -- but
+  // LR30/D30 themselves must not: a race counts exactly like any other
+  // run, including the same clip-not-drop treatment as an outlier, not a
+  // hard exclusion.
+  it('includes a race run in the pool, clipped like any other outlier -- not excluded', () => {
     const runs = mergeRuns([
-      activity('race', '2026-07-05T08:00:00', 85000, 4800, true),
-      activity('train', '2026-07-10T08:00:00', 25000, 400),
+      activity('baseline', '2026-07-01T08:00:00', 25000, 400),
+      activity('race', '2026-07-08T08:00:00', 85000, 4800, true), // well over the 1.1x cap factor
     ]);
     const aggMap = weeklyAggregates(runs, DEFAULTS);
     const dense = buildDenseTimeline([...aggMap.values()], []);
     const refs = references({ weekStart: '2026-07-20', denseTimeline: dense, actualRuns: runs }, DEFAULTS);
-    expect(refs.LR30).toBeCloseTo(25);
+    // Clipped to 1.1x the 25km baseline, not the raw 85km (unclipped) and
+    // not 25km either (which is what full exclusion would read as).
+    expect(refs.LR30).toBeCloseTo(DEFAULTS.longRunCapFactor * 25);
   });
 
   it('counts a planned week\'s long run as if done, rolling LR30 forward through the plan', () => {

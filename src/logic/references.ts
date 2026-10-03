@@ -163,22 +163,36 @@ interface LongRunPoint {
   isPlanned: boolean;
 }
 
-// Candidate points for LR30/D30: every actual (merged, non-race) run at
-// its exact date, plus one point per planned/future week at its
-// weekStart. Actual runs come from `actualRuns` directly (not the weekly
-// timeline) so a 30-day window that only partly overlaps a week still
-// gets the right day-level answer. A week that has real actual runs of
-// its own is skipped in the second loop even if it also carries a plan
+// Candidate points for LR30/D30: every actual (merged) run at its exact
+// date -- a race included, same as any other run, clipped like any other
+// outlier via clippedContribution() rather than excluded outright (v1.1
+// final pre-1.0 pass follow-up: an earlier version excluded race-tagged
+// runs here entirely, which stayed invisible for this account's whole
+// history because the sync bug that revision fixed had never let a real
+// race's flag reach D1 in the first place -- once it did, a past race
+// vanishing from its own long-run/descent reference swung the live cap
+// and injury-risk read with it, which is the opposite of "display only"
+// this feature was meant to be) -- plus one point per planned/future week
+// at its weekStart. Actual runs come from `actualRuns` directly (not the
+// weekly timeline) so a 30-day window that only partly overlaps a week
+// still gets the right day-level answer. A week that has real actual runs
+// of its own is skipped in the second loop even if it also carries a plan
 // row (buildDenseTimeline keeps that week's *type* from the plan while
 // its km/longRunKm/etc. stay the real actual figures) -- actualRuns
 // above already covers it, at exact per-run precision, and covering it
 // twice would let its real run dodge the red-exclusion check via the
 // (wrongly) unconditionally-exempt planned copy.
+//
+// A *planned* future Race week is still excluded below (w.isRaceWeek) --
+// that's a forecast, not something that's actually been run yet, and
+// letting a far-future planned race pre-emptively count toward today's
+// cap is a different question from this one (section 3.4's "the cap
+// rolls forward through the plan" is for ordinary planned long runs, not
+// for letting an undone race inflate it early).
 function longRunPoints(dense: TimelinePoint[], actualRuns: Run[]): LongRunPoint[] {
   const points: LongRunPoint[] = [];
   const actualWeekStarts = new Set(actualRuns.map((r) => mondayOf(r.startLocal)));
   for (const run of actualRuns) {
-    if (run.isRace) continue;
     points.push({ date: run.startLocal.slice(0, 10), km: run.distanceM / 1000, lossM: run.lossM, isPlanned: false });
   }
   for (const w of dense) {

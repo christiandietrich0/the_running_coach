@@ -108,15 +108,15 @@ export function weeklyAggregates(runs: Run[], settings: Settings): Map<string, W
 // row) become explicit zero weeks, so "the previous 4 weeks" always means
 // 4 calendar weeks rather than 4 weeks-that-happened-to-have-a-run.
 //
-// A race is excluded from the LR30/D30 *reference* pool (3.4's "race-
-// tagged runs excluded"), but that happens via actualRuns in
-// references.ts's longRunPoints(), which only ever reads an actual week's
-// long-run fields here for weekType == null anyway. So an actual race
-// week's own longRunKm/longRunLossM/longRunDate stay populated with the
-// race itself: the display (This Week/Plan/Chart) should show the race
-// distance as that week's long run, not null it out (v1.1 review round 4
-// item 1). A planned RACE week already sets these directly from the race
-// (plan.ts), independent of this file.
+// An actual race week's own longRunKm/longRunLossM/longRunDate stay
+// populated with the race itself (weeklyAggregates above counts every
+// run, race or not, toward a week's longest-run figures): the display
+// (This Week/Plan/Chart) shows the race distance as that week's long run,
+// and -- since v1.1 final pre-1.0 pass follow-up -- so does the LR30/D30
+// reference pool itself (references.ts's longRunPoints(), which reads an
+// actual week's long-run fields here only for weekType == null anyway). A
+// planned RACE week already sets these directly from the race (plan.ts),
+// independent of this file.
 // Planned weeks only carry a weekly D- total (plan_weeks.dminus_m), not a
 // per-run figure. Crediting the *whole* weekly total to the long run alone
 // (as if it were one run's own descent) made every planned/blended week's
