@@ -9,21 +9,23 @@ range, the max long run, and the max descent. See
 `docs/training_planner_technical_brief.md` for the architecture. The build
 plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
 
-Status: **v1.1 (logic fixes) complete, UI visual pass done.** v1 shipped,
-deployed behind Cloudflare Access, live on Christian's iPhone home screen.
-Six rounds of post-launch logic review (the long-run cap formula, the
-LR30/D30 reference date, race-driven plan structure, fixed taper
-percentages, the in-progress week's verdict, feasibility, hard long-run
-invariants applied to every week including edited ones, a dedicated
-post-race Recovery week type, "Reset to suggested", race-week shakeouts
-and race name display, the hard +30% week-on-week cap and its base
-formula, the long-run share cap, auto-regenerating the plan after sync,
-and clamping suggestPlan's own output to green) were found and fixed; see
-the git log for the exact commits -- logic is now frozen. The visual/
-naming pass (this round: renamed to Legroom, new accent colour and
-typography, redesigned screens) is done. Migrations `0002_plan_race_id.sql`
-and `0003_sync_meta.sql` need `npm run db:migrate:remote` if not already
-applied.
+Status: **v1.0.** Shipped, deployed behind Cloudflare Access, live on
+Christian's iPhone home screen. Beyond the original build (Phases 1-9:
+logic engine, intervals.icu sync, D1-backed API, PWA screens), v1.0 folds
+in many rounds of post-launch, real-use review: logic fixes (long-run cap
+formula, LR30/D30 reference date and clip-not-drop stabilization,
+race-driven plan structure, hard long-run invariants, a dedicated
+post-race Recovery week type, the weekly ratio cap and its base formula,
+auto-regenerating the plan after sync), a full visual/naming rebrand to
+Legroom, mobile polish (PWA chrome, bottom sheets, pull-to-refresh), an
+injury-risk indicator, and a final pre-1.0 pass (feasibility's LOCKED_IN
+state keyed off the race's own week type, a display-only "Peak long run
+done" figure, a wider manual-sync window plus race-tag recognition so
+intervals.icu edits actually reach D1, and a fix for a reference-pool
+regression that briefly excluded race runs from LR30/D30/DW4). See the
+git log for the exact commits -- logic is frozen. Migrations
+`0002_plan_race_id.sql` through `0004_regenerated_version.sql` need
+`npm run db:migrate:remote` if not already applied.
 
 ## Architecture
 
