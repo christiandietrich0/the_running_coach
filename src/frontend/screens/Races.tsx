@@ -1,0 +1,89 @@
+import { useState } from 'preact/hooks';
+import { deleteRace, putRace } from '../api';
+import { BottomSheet } from '../components/BottomSheet';
+import { RaceCard } from '../components/RaceCard';
+import { RaceForm } from '../components/RaceForm';
+import type { RacePatch, RaceState, StateResponse } from '../types';
+
+type EditTarget = 'new' | number | null;
+
+export function Races({ state, onStateChange }: { state: StateResponse; onStateChange: (s: StateResponse) => void }) {
+  const [editing, setEditing] = useState<EditTarget>(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const races = [...state.races].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const editingRace: RaceState | null = typeof editing === 'number' ? (races.find((r) => r.id === editing) ?? null) : null;
+  const weeksByStart = new Map(state.weeks.map((w) => [w.weekStart, w]));
+
+  async function handleSave(patch: RacePatch) {
+    setSaving(true);
+    setError(null);
+    try {
+      const id = typeof editing === 'number' ? editing : 'new';
+      const next = await putRace(id, patch);
+      onStateChange(next);
+      setEditing(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: number) {
+    setDeletingId(id);
+    setError(null);
+    try {
+      const next = await deleteRace(id);
+      onStateChange(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div class="screen">
+      <div class="card">
+        <div class="card-title-row">
+          <div class="card-title">Races</div>
+          <button type="button" class="btn-primary btn-small" onClick={() => setEditing('new')}>
+            Add race
+          </button>
+        </div>
+        {error && <p class="form-error">{error}</p>}
+      </div>
+
+      {races.length === 0 && (
+        <div class="card">
+          <p class="muted">No races yet. Add one to see targets, taper and feasibility.</p>
+        </div>
+      )}
+
+      {races.map((race) => (
+        <RaceCard
+          key={race.id}
+          race={race}
+          today={state.today}
+          peakWeekKm={(() => {
+            const peak = state.weeks.find((w) => w.peakForRaceId === race.id);
+            return peak ? (peak.plannedKm ?? peak.kmWeek) : null;
+          })()}
+          weeksByStart={weeksByStart}
+          onEdit={() => setEditing(race.id)}
+          onDelete={() => handleDelete(race.id)}
+          deleting={deletingId === race.id}
+        />
+      ))}
+
+      {editing !== null && (
+        <BottomSheet title={editing === 'new' ? 'Add race' : 'Edit race'} onClose={() => setEditing(null)}>
+          <RaceForm race={editing === 'new' ? null : editingRace} saving={saving} onSave={handleSave} onCancel={() => setEditing(null)} />
+        </BottomSheet>
+      )}
+    </div>
+  );
+}

@@ -1,19 +1,94 @@
+import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
+import { fetchState, putCheckin, runSync } from './api';
+import { CheckinSheet } from './components/CheckinSheet';
+import { TabBar, type ScreenId } from './components/TabBar';
+import { Chart } from './screens/Chart';
+import { Plan } from './screens/Plan';
+import { Races } from './screens/Races';
+import { Settings } from './screens/Settings';
+import { ThisWeek } from './screens/ThisWeek';
+import { dismissCheckin, isCheckinDismissed } from './storage';
+import type { CheckinPatch, StateResponse } from './types';
 
 export function App() {
-  const [health, setHealth] = useState<string>('checking...');
+  const [state, setState] = useState<StateResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [screen, setScreen] = useState<ScreenId>('week');
+  const [checkinOpen, setCheckinOpen] = useState(false);
+  const [checkinSaving, setCheckinSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((data) => setHealth(data.status))
-      .catch(() => setHealth('unreachable'));
+    fetchState()
+      .then((s) => {
+        setState(s);
+        if (s.checkinNeeded && !isCheckinDismissed(s.currentWeekStart)) setCheckinOpen(true);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
+  function handleSkipCheckin() {
+    if (state) dismissCheckin(state.currentWeekStart);
+    setCheckinOpen(false);
+  }
+
+  // Pull-to-refresh on This Week (v1.1 mobile polish): a manual sync,
+  // same as Settings' "Sync now", then the fresh state -- so a pull down
+  // actually pulls in new runs, not just a UI repaint.
+  async function handleRefresh() {
+    await runSync('manual');
+    const next = await fetchState();
+    setState(next);
+  }
+
+  async function handleSaveCheckin(patch: CheckinPatch) {
+    if (!state) return;
+    setCheckinSaving(true);
+    try {
+      const next = await putCheckin(state.currentWeekStart, patch);
+      setState(next);
+      setCheckinOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCheckinSaving(false);
+    }
+  }
+
   return (
-    <div class="card">
-      <h1>Weekly Load Planner</h1>
-      <p class="muted">Scaffold placeholder. API health: {health}</p>
-    </div>
+    <Fragment>
+      {/* iOS standalone mode's status bar is translucent (apple-mobile-web-app-status-bar-style:
+          black-translucent), so scrolled content otherwise shows straight through behind the
+          clock/battery icons -- this pins a solid, blurred backdrop over just that inset so
+          scrolling content disappears behind it instead (v1.1 review round 9 item 7). */}
+      <div class="status-bar-scrim" />
+      <div class="app-root">
+        <div class={`app-header${screen === 'week' ? '' : ' app-header-compact'}`}>
+          <h1 class="app-title">Legroom</h1>
+          {screen === 'week' && <p class="app-tagline">How much room your legs have this week.</p>}
+        </div>
+        {error && (
+          <div class="card">
+            <p class="muted">Could not load your data: {error}</p>
+          </div>
+        )}
+        {!error && !state && (
+          <div class="card">
+            <p class="muted">Loading...</p>
+          </div>
+        )}
+        {state && (
+          <>
+            {screen === 'week' && <ThisWeek state={state} onOpenCheckin={() => setCheckinOpen(true)} onRefresh={handleRefresh} />}
+            {screen === 'chart' && <Chart state={state} />}
+            {screen === 'plan' && <Plan state={state} onStateChange={setState} />}
+            {screen === 'races' && <Races state={state} onStateChange={setState} />}
+            {screen === 'settings' && <Settings state={state} onStateChange={setState} />}
+            <TabBar active={screen} onChange={setScreen} />
+            {checkinOpen && <CheckinSheet onSave={handleSaveCheckin} onSkip={handleSkipCheckin} saving={checkinSaving} />}
+          </>
+        )}
+      </div>
+    </Fragment>
   );
 }

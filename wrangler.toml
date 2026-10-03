@@ -10,10 +10,14 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "running-coach-db"
-# Placeholder id, valid for local dev only. Before the first remote deploy
-# (Phase 9), run `wrangler d1 create running-coach-db` and replace this
-# with the real database_id it prints.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "48fcf0f3-cfad-45b1-bac9-ca38391942db"
+
+# A UUID unique per deployed Worker version, so GET /api/state can tell a
+# deploy landed new plan logic since the plan was last regenerated and
+# re-run suggestPlan() for non-edited future weeks automatically (v1.1
+# review round 10 follow-up item 2).
+[version_metadata]
+binding = "CF_VERSION_METADATA"
 
 [triggers]
 # 02:00 UTC = 04:00 Europe/Berlin (CEST/CET aware pick per kickoff brief)

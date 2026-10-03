@@ -1,29 +1,59 @@
+import { handleListActivities, handlePutActivityOverride } from './routes/activities';
+import { handlePutCheckin } from './routes/checkin';
 import { handleHealth } from './routes/health';
-import { handleSync } from './routes/sync';
-import { runSync } from './sync';
+import { handlePreviewPlan, handlePutPlanWeek, handleResetPlanWeek, handleSuggestPlan } from './routes/plan';
+import { handleDeleteRace, handlePutRace } from './routes/races';
+import { handlePutSettings } from './routes/settings';
+import { handleState } from './routes/state';
+import { handleSync, syncAndUpdatePlan } from './routes/sync';
 
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
   ICU_API_KEY?: string;
   ICU_ATHLETE_ID?: string;
+  CF_VERSION_METADATA: { id: string; tag: string };
+  // The git short hash baked in at deploy time via `wrangler deploy --var`
+  // (package.json's deploy script) -- see health.ts's own comment for why
+  // this exists alongside CF_VERSION_METADATA and __BUILD_VERSION__.
+  WORKER_BUILD?: string;
 }
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const { pathname } = url;
+    const { method } = request;
 
-    if (url.pathname === '/api/health') {
-      return handleHealth();
+    if (pathname === '/api/health') return handleHealth(env);
+    if (pathname === '/api/sync' && method === 'POST') return handleSync(request, env);
+    if (pathname === '/api/state' && method === 'GET') return handleState(request, env);
+    if (pathname === '/api/settings' && method === 'PUT') return handlePutSettings(request, env);
+    if (pathname === '/api/plan/suggest' && method === 'POST') return handleSuggestPlan(request, env);
+    if (pathname === '/api/plan/preview' && method === 'POST') return handlePreviewPlan(request, env);
+    if (pathname === '/api/activities' && method === 'GET') return handleListActivities(request, env);
+
+    let match = pathname.match(/^\/api\/plan\/([^/]+)$/);
+    if (match) {
+      if (method === 'PUT') return handlePutPlanWeek(request, env, decodeURIComponent(match[1]));
+      if (method === 'DELETE') return handleResetPlanWeek(request, env, decodeURIComponent(match[1]));
     }
 
-    if (url.pathname === '/api/sync' && request.method === 'POST') {
-      return handleSync(request, env);
+    match = pathname.match(/^\/api\/races\/([^/]+)$/);
+    if (match) {
+      if (method === 'PUT') return handlePutRace(request, env, decodeURIComponent(match[1]));
+      if (method === 'DELETE') return handleDeleteRace(request, env, decodeURIComponent(match[1]));
     }
 
-    // No other /api/* routes exist yet (Phase 4+); fall through to assets
-    // so unmatched /api requests still 404 instead of serving index.html.
-    if (url.pathname.startsWith('/api/')) {
+    match = pathname.match(/^\/api\/checkin\/([^/]+)$/);
+    if (match && method === 'PUT') return handlePutCheckin(request, env, decodeURIComponent(match[1]));
+
+    match = pathname.match(/^\/api\/activities\/([^/]+)\/override$/);
+    if (match && method === 'PUT') return handlePutActivityOverride(request, env, decodeURIComponent(match[1]));
+
+    // No other /api/* routes exist; fall through to assets so unmatched
+    // /api requests still 404 instead of serving index.html.
+    if (pathname.startsWith('/api/')) {
       return Response.json({ error: 'not found' }, { status: 404 });
     }
 
@@ -31,6 +61,6 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runSync(env, 'incremental').then(() => undefined));
+    ctx.waitUntil(syncAndUpdatePlan(env, 'incremental').then(() => undefined));
   },
 } satisfies ExportedHandler<Env>;

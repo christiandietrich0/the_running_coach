@@ -1,13 +1,31 @@
-# Weekly Load Planner
+# Legroom
 
-A single-user PWA that pulls run history from intervals.icu and shows,
-per week: a verdict colour, a weekly km range, the max long run, and the
-max descent. See `docs/training_planner_mechanics_brief.md` for the rules
-and `docs/training_planner_technical_brief.md` for the architecture. The
-build plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
+*How much room your legs have this week.*
 
-Status: **Phase 2 (Sync)** in progress. Logic, API and UI land in later
-phases.
+A single-user PWA (formerly "Weekly Load Planner") that pulls run history
+from intervals.icu and shows, per week: a verdict colour, a weekly km
+range, the max long run, and the max descent. See
+`docs/training_planner_mechanics_brief.md` for the rules and
+`docs/training_planner_technical_brief.md` for the architecture. The build
+plan and working agreement are in `docs/claude_code_kickoff_prompt.md`.
+
+Status: **v1.0.** Shipped, deployed behind Cloudflare Access, live on
+Christian's iPhone home screen. Beyond the original build (Phases 1-9:
+logic engine, intervals.icu sync, D1-backed API, PWA screens), v1.0 folds
+in many rounds of post-launch, real-use review: logic fixes (long-run cap
+formula, LR30/D30 reference date and clip-not-drop stabilization,
+race-driven plan structure, hard long-run invariants, a dedicated
+post-race Recovery week type, the weekly ratio cap and its base formula,
+auto-regenerating the plan after sync), a full visual/naming rebrand to
+Legroom, mobile polish (PWA chrome, bottom sheets, pull-to-refresh), an
+injury-risk indicator, and a final pre-1.0 pass (feasibility's LOCKED_IN
+state keyed off the race's own week type, a display-only "Peak long run
+done" figure, a wider manual-sync window plus race-tag recognition so
+intervals.icu edits actually reach D1, and a fix for a reference-pool
+regression that briefly excluded race runs from LR30/D30/DW4). See the
+git log for the exact commits -- logic is frozen. Migrations
+`0002_plan_race_id.sql` through `0004_regenerated_version.sql` need
+`npm run db:migrate:remote` if not already applied.
 
 ## Architecture
 
@@ -72,6 +90,159 @@ from anywhere else and never committed.
 - Both endpoints return a JSON summary: activities fetched/stored per
   request, a per-month breakdown, and elevation-loss backfill counts.
 
+## Logic module
+
+`src/logic/` is the pure TypeScript rules engine (no I/O), split by
+concern: `aggregate.ts` (mergeRuns, weeklyAggregates, the dense weekly
+timeline), `references.ts` (C, LR30, D30, DW4, M12), `flags.ts` (the 5.1
+flags, verdict, symptom check-in locks), `corridor.ts` (per-week-type
+ceilings), `races.ts` (raceTargets, feasibility) and `plan.ts`
+(suggestPlan). Every threshold comes from `src/worker/defaults.ts`
+(`Settings`/`Defaults`), never hardcoded here.
+
+Run the logic over the real history synced into local D1 and print a
+week-by-week table:
+
+```bash
+npm run backtest
+```
+
+It shells out to `wrangler d1 execute --local`, so it needs the local D1
+schema applied and at least one backfill run first (see Sync above).
+
+## API
+
+See `training_planner_technical_brief.md` section 7 for the full spec.
+Every write endpoint validates its body (`src/worker/validation.ts`) and
+returns the fresh `GET /api/state` payload, so the frontend never needs a
+separate refetch after a write.
+
+| Endpoint | Does |
+|---|---|
+| `GET /api/state` | Weeks (history + up to 12 weeks planned/blank ahead) with metrics, refs, corridor, flags and verdict; races with targets and feasibility; current settings |
+| `POST /api/sync?mode=backfill\|incremental` | Manual refresh from intervals.icu |
+| `PUT /api/plan/:week` | Edit a planned week (`:week` a Monday date). Always sets `user_edited` |
+| `DELETE /api/plan/:week` | "Reset to suggested": clears `user_edited` for that week and re-runs auto-fill |
+| `POST /api/plan/suggest` | Run auto-fill (never touches edited/Limited weeks), persist the result |
+| `PUT /api/races/new` or `PUT /api/races/:id` | Create (`new`) or replace a race. Auto-reruns auto-fill so the race's structure lands immediately |
+| `DELETE /api/races/:id` | Remove a race. Also auto-reruns auto-fill |
+| `PUT /api/checkin/:week` | Save a symptom check-in for that week |
+| `PUT /api/activities/:id/override` | Set `isRace`/`exclude` for one activity; 404 on an unknown id |
+| `PUT /api/settings` | Patch one or more `defaults.ts` parameters; rejects unknown keys or a value with the wrong shape |
+| `GET /api/activities` | Every synced activity (including excluded ones) with its effective race status, for the Settings screen's race-override list. Not part of `GET /api/state`, which stays screen-sized |
+
+The current week's type reflects the check-in symptom lock (mechanics
+brief 5.3) automatically; past and future weeks use their plan row's
+type, or `BUILD` (or `RACE`, if any activity that week is race-flagged)
+when there isn't one yet.
+
+## Frontend screens
+
+One accent colour (indigo, `--accent`) for every interactive/brand
+element; status colours (green/yellow/red/blue, plus violet for race
+identity) are reserved for status and never doubled up as the accent.
+`src/frontend/labels.ts`'s `weekChipLabel()` is the single source for the
+week-type chip text ("Build week", "Taper week 1 of 2", "Peak week",
+"Race day -- <name>", ...), shared by This Week and Plan.
+
+- **This Week** (`screens/ThisWeek.tsx`): week-type chip, a small
+  dot-plus-one-line verdict (no banner), a big "X to Y km left" / "Z km
+  done" headline (`components/WeekHeadline.tsx`, sourced from
+  `state.weeks[current].guidance` -- the same `remainingWeekGuidance()`
+  figures as before, just exposed as data instead of pre-formatted into
+  `verdict.reason`), the three progress stats with the cap spelled out in
+  words and ratios/references tucked behind a "Show ratios and
+  references" tap, this week's runs, check-in prompt, next race card.
+- **Chart** (`screens/Chart.tsx` + `components/WeekChart.tsx`, Chart.js):
+  12 weeks back (solid bars) through the plan's lookahead (lighter,
+  thin-hatched), colour bands, a long-run/descent dot with its cap line, a
+  dashed "Today" divider between actual and planned, a small flag + name
+  above a race week's bar, the y max clamped to 1.2x the largest bar (so
+  one outlier reference no longer stretches the whole axis), a tap
+  tooltip with type/km/LR/D-/verdict, a km / effort-km / descent toggle,
+  and a two-line legend under the toggle. Two spec gaps filled by
+  interpretation, flagged for Christian:
+  - Colour bands: km and effort-km both use the km-based chronic
+    reference C (mechanics brief 3.3 says effort-km uses "the same
+    ratio" but doesn't define a separate effort-km chronic reference);
+    descent uses DW4 with the weekly D- cap factors (green/yellow/red,
+    no blue -- there's no low-descent flag).
+  - The long-run dot switches to single-run descent (with the D30 x 1.20
+    cap line) when the descent toggle is active, rather than staying on
+    a km scale that wouldn't fit the metres axis.
+- **Plan** (`screens/Plan.tsx`): each row is a mini bar (km against its
+  own corridor ceiling, falling back to the account's max-week cap when
+  the corridor is open -- Race/Taper/Recovery -- so the bar stays
+  meaningful instead of reading a constant ~95% full) with a dot marking
+  the long run and the km figure to the right; a race's taper + race +
+  post-race recovery rows are visually grouped in one bordered block; the
+  current week's row shows its corridor target alongside the actual done
+  so far; "Rebuild plan" previews a diff ("N weeks will change", via a new
+  non-persisting `POST /api/plan/preview` that calls the exact same
+  `suggestPlan()` regeneratePlan() does) before Apply actually persists
+  it; a capped peak week shows a small grey "Peak week capped at X km
+  (race target Y km)" line, not a warning. Edited/Limited weeks are never
+  touched by Rebuild plan, same as before.
+- **Races** (`screens/Races.tsx`): add/edit/delete; priority is a
+  segmented A/B/C control with a one-line explanation of what it changes
+  (taper length); the taper block shows each taper week's actual calendar
+  date and its real generated km (looked up from `state.weeks`), not a
+  volume percentage; feasibility and the peak-week-capped note prefer the
+  actual generated week's numbers over feasibility's own growth-rate
+  estimate, which can read more optimistic (C is a rolling mean, not a
+  value that jumps straight to a new level).
+
+Every write on Plan/Races hands the fresh `GET /api/state` response
+(already returned by the write endpoint itself) straight to `App.tsx`'s
+state, so there's never a second round-trip after a save.
+
+**Bug found and fixed while testing Suggest plan**: `buildDenseTimeline`
+let a plan row fully replace an already-actual week's numbers, so
+running Suggest plan mid-week silently overwrote the current week's real
+progress (e.g. 38km actually run) with the suggested target (e.g. 74km)
+everywhere that week was displayed. Fixed in `src/logic/aggregate.ts` --
+a plan row now only annotates the week's type when real data already
+exists for it; the real numbers always win. Covered by a new test in
+`test/logic/aggregate.test.ts`.
+- **Check-in sheet** (`components/CheckinSheet.tsx`): four 0-10 sliders
+  plus the reduced-training toggle. Opens automatically once per week when
+  a check-in is due (`state.checkinNeeded`) and hasn't already been
+  skipped this week (tracked client-side in `localStorage`, since
+  "skipped" isn't a concept the backend needs to know about); also
+  reachable any time by tapping the This Week check-in banner.
+- **Settings** (`screens/Settings.tsx`): sync-now, the include-hikes
+  toggle, the two personal caps (max week km, max long run km) and the
+  build version/date up top; every other `defaults.ts` parameter grouped
+  to match mechanics brief section 9 (`src/frontend/settingsFields.ts` is
+  the single source of field labels/grouping) lives behind a collapsed
+  "Advanced" disclosure; the race-override list (mechanics brief 8.5's
+  "race overrides for past activities") backed by `GET /api/activities`.
+  Saving diffs the edited object against what was loaded and only sends
+  the top-level keys that changed. The build stamp (`__BUILD_VERSION__`,
+  date + short git hash) is injected by `vite.config.ts` at build time.
+
+## PWA
+
+`src/frontend/public/` holds everything Vite copies through unmodified:
+`manifest.json` (standalone display, two icon sizes), the Legroom icon
+(`icons/icon-source.svg`, two rounded bars in the accent colour,
+rasterized to the PNG set with `sharp`), and `sw.js`, a hand-written
+service worker (no build plugin, to keep the dependency list as it is):
+
+- `GET /api/state` is network-first, caching the latest successful
+  response and falling back to it when offline -- last-known state
+  beats a blank screen.
+- Every other `/api/*` call bypasses the cache entirely (caching a write
+  response would be actively wrong).
+- Everything else (the shell: HTML/JS/CSS) is stale-while-revalidate:
+  instant from cache, refreshed in the background. This avoids needing
+  to know Vite's hashed asset filenames ahead of time, since it caches
+  whatever the browser actually requests rather than a fixed precache
+  list.
+
+Registered from `main.tsx` after first paint; a failed registration
+never blocks the app itself.
+
 ## Tests
 
 ```bash
@@ -87,12 +258,24 @@ globals (`Request`, `Response`, `fetch`, ...).
 
 ## Deploy
 
-Not done yet. Deploying touches real Cloudflare resources (D1 database
-creation, secrets, the Worker itself) and needs explicit sign-off first,
-per the project's working agreement. Phase 9 will add the exact commands
-here: `wrangler d1 create`, `wrangler d1 migrations apply --remote`,
-`wrangler secret put ICU_API_KEY`, `wrangler secret put ICU_ATHLETE_ID`,
-`wrangler deploy`.
+Deploying touches real Cloudflare resources and needs explicit sign-off
+per command, per the project's working agreement -- run these yourself
+from a machine with `wrangler` logged in, not from an unattended session.
+
+The remote D1 database is created (`database_id` in `wrangler.toml` is
+the real one). What's left:
+
+```bash
+npm run db:migrate:remote
+npx wrangler secret put ICU_API_KEY
+npx wrangler secret put ICU_ATHLETE_ID
+npm run deploy
+curl -X POST "https://<your-worker-url>/api/sync?mode=backfill"
+```
+
+Then Cloudflare Access (email one-time code, your email only, 30-day
+session) in front of the whole domain, and on iOS: open the Worker's URL
+in Safari, log in once, Share -> Add to Home Screen.
 
 The existing `icu-mcp` Worker on the same Cloudflare account is a
 separate project and is never touched by this one.

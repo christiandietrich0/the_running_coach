@@ -5,13 +5,27 @@ import { getIncludeHikes } from './settings-store';
 
 const BACKFILL_MONTHS = 24;
 const INCREMENTAL_DAYS = 21;
+// The daily cron stays on the short window above; "Sync now" (and pull-to-
+// refresh, the same action) uses this wider one instead, so editing an
+// older activity in intervals.icu -- marking a past race, say -- actually
+// reaches D1 without waiting for a full 24-month backfill. The live bug:
+// Bukovina (Jul 24) got marked as a race in intervals.icu, but manual sync
+// only re-fetched the last 21 days, so the edit never landed.
+const MANUAL_DAYS = 120;
 
 // Workers Free plan caps fetch() subrequests at 50 per invocation. Month-chunk
 // list calls use most of that budget on a 24-month backfill, so elevation-loss
 // detail calls are capped and spread across repeated syncs if needed.
 const MAX_SUBREQUESTS = 45;
 
-export type SyncMode = 'backfill' | 'incremental';
+export type SyncMode = 'backfill' | 'incremental' | 'manual';
+
+// intervals.icu's own race checkbox, or a "race" tag -- however the
+// athlete chose to mark it. Case-insensitive, exact tag match (not a
+// substring) so a tag like "race pace" doesn't also count.
+export function isRaceActivity(a: Pick<IntervalsActivity, 'race' | 'tags'>): boolean {
+  return !!a.race || (a.tags ?? []).some((t) => t.trim().toLowerCase() === 'race');
+}
 
 export interface SyncResult {
   mode: SyncMode;
@@ -36,16 +50,26 @@ function requireConfig(env: Env): IntervalsClientConfig {
   return { athleteId: env.ICU_ATHLETE_ID, apiKey: env.ICU_API_KEY };
 }
 
+// D1's underlying SQLite caps bound parameters per statement well below the
+// hundreds of activity ids a 24-month backfill can produce, so this looks
+// them up in chunks rather than one IN (...) with an id per bind param.
+const ID_LOOKUP_CHUNK_SIZE = 90;
+
 async function existingLossById(env: Env, ids: string[]): Promise<Map<string, number | null>> {
   const result = new Map<string, number | null>();
   if (ids.length === 0) return result;
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = await env.DB.prepare(`SELECT id, loss_m FROM activities WHERE id IN (${placeholders})`)
-    .bind(...ids)
-    .all<{ id: string; loss_m: number | null }>();
-  for (const row of rows.results ?? []) {
-    result.set(row.id, row.loss_m);
+
+  for (let i = 0; i < ids.length; i += ID_LOOKUP_CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + ID_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await env.DB.prepare(`SELECT id, loss_m FROM activities WHERE id IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ id: string; loss_m: number | null }>();
+    for (const row of rows.results ?? []) {
+      result.set(row.id, row.loss_m);
+    }
   }
+
   return result;
 }
 
@@ -77,7 +101,7 @@ async function upsertActivities(env: Env, activities: IntervalsActivity[], synce
       a.moving_time ?? null,
       a.total_elevation_gain ?? null,
       a.total_elevation_loss ?? null,
-      a.race ? 1 : 0,
+      isRaceActivity(a) ? 1 : 0,
       syncedAt,
     ),
   );
@@ -95,7 +119,8 @@ export async function runSync(env: Env, mode: SyncMode): Promise<SyncResult> {
   const types = storedTypes(includeHikes);
 
   const now = new Date();
-  const oldest = mode === 'backfill' ? monthsBefore(now, BACKFILL_MONTHS) : daysBefore(now, INCREMENTAL_DAYS);
+  const oldest =
+    mode === 'backfill' ? monthsBefore(now, BACKFILL_MONTHS) : daysBefore(now, mode === 'manual' ? MANUAL_DAYS : INCREMENTAL_DAYS);
   const chunks = monthChunks(oldest, now);
 
   const perMonth: Record<string, number> = {};
